@@ -126,7 +126,7 @@ describe('analyze', () => {
     repo.commit('dev renomeia', { 'src/lib.js': 'exports.somar = (a, b) => a + b;\n' });
     repo.branch('feat', 'main');
     repo.commit('feat usa', { 'src/usa.js': "require('./lib').soma(1, 2);\n" });
-    const r = analyze({ cwd: repo.dir, cfg: DEFAULT_CONFIG, ...quiet, testCommand: 'node check.js' });
+    const r = analyze({ cwd: repo.dir, cfg: mergeConfig(DEFAULT_CONFIG, { isolation: { mode: 'none' } }), ...quiet, testCommand: 'node check.js' });
     assert.equal(r.targets.find((t) => t.target === 'dev')?.status, 'clean');
     assert.equal(r.semantic[0]?.cause, 'semantic-conflict');
     assert.equal(r.verdict.level, 'block');

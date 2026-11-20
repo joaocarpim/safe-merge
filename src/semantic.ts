@@ -82,10 +82,14 @@ export function resolveIsolation(cfg: Config, tools: ToolRunner, platform = proc
   if (cfg.isolation.mode === 'none') {
     reason = 'isolamento desligado na configuração (isolation.mode = "none")';
   } else {
-    const probe = tools(cfg.security.tools.docker, ['info', '--format', '{{.ServerVersion}}'], { timeoutMs: 20_000 });
-    if (!probe.missing && probe.code === 0) mode = 'docker';
-    else if (cfg.isolation.mode === 'docker') return { error: `Docker exigido pela configuração e indisponível (${probe.missing ? 'não instalado' : 'não respondeu'})` };
-    else reason = `Docker ${probe.missing ? 'não instalado' : 'parado'}: testes rodaram nesta máquina com rede, mas com ambiente limpo`;
+    // a imagem é Linux: Docker no modo de contêineres Windows responde ao `info` mas não roda a imagem
+    const probe = tools(cfg.security.tools.docker, ['info', '--format', '{{.OSType}}'], { timeoutMs: 20_000 });
+    const osType = probe.stdout.trim().toLowerCase();
+    const usable = !probe.missing && probe.code === 0 && osType === 'linux';
+    const why = probe.missing ? 'não instalado' : probe.code !== 0 ? 'parado' : `em modo de contêineres ${osType || 'desconhecido'} (precisa ser Linux)`;
+    if (usable) mode = 'docker';
+    else if (cfg.isolation.mode === 'docker') return { error: `Docker exigido pela configuração e indisponível (${why})` };
+    else reason = `Docker ${why}: testes rodaram nesta máquina com rede, mas com ambiente limpo`;
   }
   let traced = false;
   let traceReason: string | undefined;
@@ -118,6 +122,12 @@ export function runStep(repoDir: string, dir: string, command: string, cfg: Conf
       ['run', '--rm', '--network', 'none', '-v', `${dir}:/work`, ...mounts, '-w', '/work', '-e', 'CI=1', '-e', 'SAFEMERGE=1', cfg.isolation.image, 'sh', '-c', command],
       { timeoutMs: timeout },
     );
+    if (res.code === 125 || res.code === 127) {
+      // 125: o próprio `docker run` falhou (imagem não baixou, daemon recusou); 127: docker sumiu.
+      // Não é o teste que falhou: vira erro, com o motivo, e não "não mergear".
+      const first = res.stderr.split('\n').find((l) => l.trim()) ?? 'sem mensagem';
+      throw new Error(`Docker não conseguiu rodar a imagem ${cfg.isolation.image}: ${first.trim().slice(0, 200)}`);
+    }
     return { code: res.code, timedOut: res.timedOut, out: `${res.stdout}\n${res.stderr}`.split(dir).join('.').split('/work/').join('./') };
   }
 

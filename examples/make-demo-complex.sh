@@ -51,6 +51,7 @@ EOF
 w .safemerge/config.json <<'EOF'
 {
   "semantic": { "command": "node test/run.js", "timeoutSec": 120 },
+  "isolation": { "mode": "none" },
   "domain": { "tenantModels": ["Orcamento", "Cliente", "OrdemServico"] }
 }
 EOF

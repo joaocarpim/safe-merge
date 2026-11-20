@@ -343,9 +343,14 @@ describe('isolamento e registro', () => {
   });
 
   it('usa Docker quando responde; sem Docker avisa "sem isolamento"; modo docker sem Docker é erro', () => {
-    const docker: ToolRunner = (cmd) => (cmd === 'docker' ? ok('27.0') : absent);
+    const docker: ToolRunner = (cmd) => (cmd === 'docker' ? ok('linux') : absent);
+    const dockerWindows: ToolRunner = (cmd) => (cmd === 'docker' ? ok('windows') : absent);
     const iso = resolveIsolation(DEFAULT_CONFIG, docker, 'linux');
     assert.ok(!('error' in iso) && iso.mode === 'docker');
+    // Docker em modo de contêineres Windows responde, mas não roda a imagem Linux: não conta como Docker
+    const win = resolveIsolation(DEFAULT_CONFIG, dockerWindows, 'win32');
+    assert.ok(!('error' in win) && win.mode === 'local' && /contêineres windows/.test(win.reason ?? ''), JSON.stringify(win));
+    assert.ok('error' in resolveIsolation(mergeConfig(DEFAULT_CONFIG, { isolation: { mode: 'docker' } }), dockerWindows, 'win32'));
     const local = resolveIsolation(DEFAULT_CONFIG, noTools, 'win32');
     assert.ok(!('error' in local) && local.mode === 'local' && /sem isolamento|não instalado/.test(local.reason ?? ''));
     assert.ok(!('error' in local) && local.traced === false && /Linux/.test(local.traceReason ?? ''));

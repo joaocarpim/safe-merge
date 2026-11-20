@@ -31,7 +31,7 @@ describe('semanticCheck', () => {
     repo.commit('dev renomeia soma para somar', { 'src/lib.js': 'exports.somar = (a, b) => a + b;\n' });
     repo.branch('feat', 'main');
     repo.commit('feat usa soma', { 'src/usa.js': "const { soma } = require('./lib');\nif (soma(1, 2) !== 3) throw new Error('soma errada');\n" });
-    const r = semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, CMD);
+    const r = semanticCheck(repo.dir, 'HEAD', dev, LOCAL, CMD);
     assert.equal(r.status, 'failed');
     assert.equal(r.cause, 'semantic-conflict');
     assert.match(r.outputTail, /soma is not a function/);
@@ -44,7 +44,7 @@ describe('semanticCheck', () => {
     repo.commit('dev mexe em notas', { 'src/notas.txt': 'y\n' });
     repo.branch('feat', 'main');
     repo.commit('feat usa soma', { 'src/usa.js': "require('./lib').soma(1, 2);\n" });
-    const r = semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, CMD);
+    const r = semanticCheck(repo.dir, 'HEAD', dev, LOCAL, CMD);
     assert.equal(r.status, 'passed');
     assert.equal(r.exitCode, 0);
   });
@@ -54,7 +54,7 @@ describe('semanticCheck', () => {
     repo.commit('dev quebrado', { 'src/quebrado.js': "throw new Error('dev quebrada');\n" });
     repo.branch('feat', 'main');
     repo.commit('feat', { 'src/ok.js': 'module.exports = 1;\n' });
-    const r = semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, CMD);
+    const r = semanticCheck(repo.dir, 'HEAD', dev, LOCAL, CMD);
     assert.equal(r.status, 'failed');
     assert.equal(r.cause, 'target-failing');
   });
@@ -64,7 +64,7 @@ describe('semanticCheck', () => {
     repo.commit('dev', { 'src/notas.txt': 'y\n' });
     repo.branch('feat', 'main');
     repo.commit('feat quebrada', { 'src/quebrada.js': "throw new Error('feat quebrada');\n" });
-    const r = semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, CMD);
+    const r = semanticCheck(repo.dir, 'HEAD', dev, LOCAL, CMD);
     assert.equal(r.status, 'failed');
     assert.equal(r.cause, 'branch-failing');
   });
@@ -72,7 +72,7 @@ describe('semanticCheck', () => {
   it('pula quando não há comando', () => {
     project();
     repo.branch('feat', 'main');
-    const r = semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, null);
+    const r = semanticCheck(repo.dir, 'HEAD', dev, LOCAL, null);
     assert.equal(r.status, 'skipped');
   });
 
@@ -81,7 +81,7 @@ describe('semanticCheck', () => {
     repo.commit('dev', { 'src/notas.txt': 'DEV\n' });
     repo.branch('feat', 'main');
     repo.commit('feat', { 'src/notas.txt': 'FEAT\n' });
-    const r = semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, CMD);
+    const r = semanticCheck(repo.dir, 'HEAD', dev, LOCAL, CMD);
     assert.equal(r.status, 'skipped');
     assert.match(r.reason ?? '', /conflito de texto/);
   });
@@ -120,7 +120,7 @@ describe('semanticCheck', () => {
     const calls: string[][] = [];
     const docker: ToolRunner = (cmd, args) => {
       calls.push(args);
-      return { missing: false, code: 0, stdout: '', stderr: '', timedOut: false };
+      return { missing: false, code: 0, stdout: args[0] === 'info' ? 'linux' : '', stderr: '', timedOut: false };
     };
     const r = semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, CMD, { tools: docker });
     assert.equal(r.status, 'passed');
@@ -130,6 +130,24 @@ describe('semanticCheck', () => {
     assert.ok(run.some((a) => a.endsWith(':/work')));
     assert.equal(run.at(-1), CMD);
     assert.ok(!run.includes('--env-file') && !run.some((a) => /TOKEN|KEY/.test(a)));
+  });
+
+  it('docker run que falha por infraestrutura (imagem, daemon) é erro, nunca "testes falharam"', () => {
+    project();
+    repo.commit('dev', { 'src/notas.txt': 'y\n' });
+    repo.branch('feat', 'main');
+    repo.commit('feat', { 'src/a.js': 'module.exports = 1;\n' });
+    const quebrado: ToolRunner = (cmd, args) => ({
+      missing: false,
+      code: args[0] === 'info' ? 0 : 125,
+      stdout: args[0] === 'info' ? 'linux' : '',
+      stderr: args[0] === 'info' ? '' : 'docker: no matching manifest for windows/amd64 in the manifest list entries',
+      timedOut: false,
+    });
+    const r = semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, CMD, { tools: quebrado });
+    assert.equal(r.status, 'error');
+    assert.match(r.reason ?? '', /Docker não conseguiu rodar a imagem/);
+    assert.equal(r.cause, undefined);
   });
 
   it('modo local: testes não recebem tokens do ambiente', () => {
@@ -153,7 +171,7 @@ describe('semanticCheck', () => {
     repo.branch('feat', 'main');
     repo.commit('feat', { 'src/a.js': 'module.exports = 1;\n' });
     const before = { head: repo.git('rev-parse', 'HEAD'), status: repo.git('status', '--porcelain'), branches: repo.git('branch', '--list') };
-    semanticCheck(repo.dir, 'HEAD', dev, DEFAULT_CONFIG, CMD);
+    semanticCheck(repo.dir, 'HEAD', dev, LOCAL, CMD);
     assert.equal(repo.git('worktree', 'list').split('\n').length, 1);
     assert.equal(repo.git('rev-parse', 'HEAD'), before.head);
     assert.equal(repo.git('status', '--porcelain'), before.status);
