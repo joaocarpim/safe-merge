@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/joaocarpim/safemerge/actions/workflows/ci.yml"><img src="https://github.com/joaocarpim/safemerge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/joaocarpim/safe-merge/actions/workflows/ci.yml"><img src="https://github.com/joaocarpim/safe-merge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white" alt="Node 20+">
   <img src="https://img.shields.io/badge/depend%C3%AAncias-0-2f8a5b" alt="Zero dependências em produção">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-MIT-3e5f9e" alt="MIT"></a>
-  <a href="https://github.com/joaocarpim/safemerge/stargazers"><img src="https://img.shields.io/github/stars/joaocarpim/safemerge?style=flat" alt="Estrelas"></a>
+  <a href="https://github.com/joaocarpim/safe-merge/stargazers"><img src="https://img.shields.io/github/stars/joaocarpim/safe-merge?style=flat" alt="Estrelas"></a>
 </p>
 
 <p align="center">
@@ -82,7 +82,7 @@ importa é o do seu repositório.
 **Requisitos:** Node.js 20+ e git 2.38+.
 
 ```bash
-npm install -g github:joaocarpim/safemerge
+npm install -g github:joaocarpim/safe-merge
 safemerge --help
 ```
 
@@ -90,7 +90,7 @@ safemerge --help
 <summary>A partir do código (para contribuir)</summary>
 
 ```bash
-git clone https://github.com/joaocarpim/safemerge.git
+git clone https://github.com/joaocarpim/safe-merge.git
 cd safemerge
 npm install        # instala e compila
 npm link           # deixa o comando "safemerge" no terminal
@@ -171,7 +171,7 @@ salvar e mandar para a IA, e um som quando pode mergear.
 
 **Instalação:**
 
-1. Baixe o `safemerge-0.3.0.vsix` na página de [Releases](https://github.com/joaocarpim/safemerge/releases).
+1. Baixe o `safemerge-0.3.0.vsix` na página de [Releases](https://github.com/joaocarpim/safe-merge/releases).
 2. Instale:
    ```bash
    code --install-extension safemerge-0.3.0.vsix
@@ -216,7 +216,7 @@ assistente e **confere** o que a IA responder. A IA propõe; você decide.
 **a) Cole o repositório no seu assistente** (Claude Code, Cursor, Copilot Chat, Codex…):
 
 ```text
-Instale o safemerge (npm install -g github:joaocarpim/safemerge) e rode
+Instale o safemerge (npm install -g github:joaocarpim/safe-merge) e rode
 "safemerge --format prompt --save" na minha branch atual. Siga as regras do pedido que ele gerar:
 explique cada problema, proponha a correção sem aplicar, verifique cada resolução de conflito com
 "safemerge verify-resolution" e confira a sua resposta com "safemerge verify-text" antes de me mostrar.
@@ -249,7 +249,7 @@ não aplicar sem confirmação, preservar a intenção dos dois lados e só cita
 **c) Plugin do Claude Code** (skill `/safemerge` e agentes de testes, revisão e segurança):
 
 ```text
-/plugin marketplace add joaocarpim/safemerge
+/plugin marketplace add joaocarpim/safe-merge
 /plugin install safemerge@safemerge
 /safemerge
 ```
@@ -296,7 +296,7 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - uses: joaocarpim/safemerge@v0.3.0
+      - uses: joaocarpim/safe-merge@v0.3.0
         with:
           test-command: npm test
           fail-on: block

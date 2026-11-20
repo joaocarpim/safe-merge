@@ -22,7 +22,7 @@ jobs:
           node-version: 20
       - run: npm ci
       # Para produção, fixe pelo SHA do commit em vez da tag.
-      - uses: joaocarpim/safemerge@v0.3.0
+      - uses: joaocarpim/safe-merge@v0.3.0
         with:
           test-command: npm test
           fail-on: block

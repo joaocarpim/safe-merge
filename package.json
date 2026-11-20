@@ -44,11 +44,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/joaocarpim/safemerge.git"
+    "url": "git+https://github.com/joaocarpim/safe-merge.git"
   },
   "bugs": {
-    "url": "https://github.com/joaocarpim/safemerge/issues"
+    "url": "https://github.com/joaocarpim/safe-merge/issues"
   },
-  "homepage": "https://github.com/joaocarpim/safemerge#readme",
+  "homepage": "https://github.com/joaocarpim/safe-merge#readme",
   "author": "Joao Carpim"
 }
