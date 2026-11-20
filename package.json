@@ -21,7 +21,8 @@
     "test": "node scripts/run-tests.mjs",
     "dev": "node --import tsx src/cli.ts",
     "test:complex": "node --import tsx --test --test-reporter=spec test/complex/complex.test.ts",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "license": "MIT",
   "devDependencies": {
@@ -32,11 +33,13 @@
   "keywords": [
     "git",
     "merge",
-    "conflito",
     "conflict",
-    "seguranca",
+    "conflito",
+    "pull-request",
     "security",
-    "pr",
-    "sarif"
+    "sarif",
+    "lgpd",
+    "code-review",
+    "cli"
   ]
 }
