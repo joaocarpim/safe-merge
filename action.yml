@@ -1,0 +1,89 @@
+name: safemerge
+description: Diz se o PR pode ser mergeado antes do merge (conflitos, outros PRs, testes no merge, segurança do que o PR introduz) e comenta no PR.
+author: Joao
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  test-command:
+    description: Comando de testes rodado no resultado do merge (ex.. npm test). Vazio = sem checagem semântica.
+    required: false
+    default: ''
+  build-command:
+    description: Comando de build rodado antes dos testes no resultado do merge.
+    required: false
+    default: ''
+  fail-on:
+    description: block, warn ou never. Nível do veredito que faz o job falhar.
+    required: false
+    default: block
+  comment:
+    description: Comentar o relatório no PR (true/false). Precisa de permissions pull-requests write.
+    required: false
+    default: 'true'
+  github-token:
+    description: Token para o gh comentar e listar PRs.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  level:
+    description: Veredito (ok, warn, block).
+    value: ${{ steps.analyze.outputs.level }}
+
+runs:
+  using: composite
+  steps:
+    - name: Instalar o safemerge
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --no-audit --no-fund && npm run build
+
+    - name: Analisar
+      id: analyze
+      shell: bash
+      env:
+        SM_CLI: ${{ github.action_path }}/dist/cli.js
+        SM_HEAD: ${{ github.head_ref }}
+        SM_BASE: ${{ github.base_ref }}
+        SM_TEST: ${{ inputs.test-command }}
+        SM_BUILD: ${{ inputs.build-command }}
+        SM_FAIL_ON: ${{ inputs.fail-on }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set +e
+        args=(--format markdown --out "$RUNNER_TEMP/safemerge.md" --sarif "$RUNNER_TEMP/safemerge.sarif" --fail-on never --no-color)
+        if [ -n "$SM_HEAD" ]; then git fetch --quiet origin "$SM_HEAD"; args+=(--head "origin/$SM_HEAD"); fi
+        if [ -n "$SM_BASE" ]; then args+=(--base "$SM_BASE"); fi
+        if [ -n "$SM_TEST" ]; then args+=(--test-cmd "$SM_TEST"); fi
+        if [ -n "$SM_BUILD" ]; then args+=(--build-cmd "$SM_BUILD"); fi
+        node "$SM_CLI" "${args[@]}" --save
+        code=$?
+        if [ $code -eq 2 ]; then echo "::error::safemerge não conseguiu analisar (veja o log acima)"; exit 2; fi
+        run_dir=".safemerge/runs/$(ls .safemerge/runs | sort | tail -n 1)"
+        level=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).verdict.level)" "$run_dir/report.json")
+        echo "level=$level" >> "$GITHUB_OUTPUT"
+        # anotações inline no diff do PR (achados e blocos em conflito)
+        node "$SM_CLI" render --report "$run_dir/report.json" --format github
+        cat "$RUNNER_TEMP/safemerge.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Comentar no PR
+      if: ${{ inputs.comment == 'true' && github.event.pull_request.number }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        SM_PR: ${{ github.event.pull_request.number }}
+      run: gh pr comment "$SM_PR" --body-file "$RUNNER_TEMP/safemerge.md" --edit-last 2>/dev/null || gh pr comment "$SM_PR" --body-file "$RUNNER_TEMP/safemerge.md"
+
+    - name: Aplicar o veredito
+      shell: bash
+      env:
+        SM_LEVEL: ${{ steps.analyze.outputs.level }}
+        SM_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        rank() { case "$1" in block) echo 2;; warn) echo 1;; *) echo 0;; esac; }
+        if [ "$SM_FAIL_ON" != "never" ] && [ "$(rank "$SM_LEVEL")" -ge "$(rank "$SM_FAIL_ON")" ]; then
+          echo "::error::safemerge: veredito $SM_LEVEL (fail-on: $SM_FAIL_ON)"
+          exit 1
+        fi

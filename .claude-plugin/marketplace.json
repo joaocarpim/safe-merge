@@ -1,0 +1,11 @@
+{
+  "name": "safemerge",
+  "owner": { "name": "Joao" },
+  "plugins": [
+    {
+      "name": "safemerge",
+      "source": "./plugin",
+      "description": "Gate de merge: conflitos (inclusive com outros PRs e semânticos), segurança do que a branch introduz e resolução assistida verificada."
+    }
+  ]
+}

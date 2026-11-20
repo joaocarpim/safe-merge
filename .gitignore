@@ -1,0 +1,14 @@
+node_modules
+dist
+.safemerge/runs
+# cópia antiga do projeto, ainda com o nome pr-guardian; não versionar
+safemerge.zip
+
+# ── fora do repositório público (ficam só nesta máquina) ──
+# contexto interno do projeto
+CLAUDE.md
+# protótipo de design
+docs/prototipo/
+# extensão do VS Code (não é necessária para usar a ferramenta)
+extension/
+docs/EXTENSAO.md

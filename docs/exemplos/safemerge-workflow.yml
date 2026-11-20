@@ -1,0 +1,28 @@
+# Copie para .github/workflows/safemerge.yml no seu repositório.
+# Usa pull_request (não pull_request_target): o código do PR roda sem segredos do repositório.
+name: safemerge
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write # para comentar o relatório no PR
+
+jobs:
+  safemerge:
+    runs-on: ubuntu-latest
+    steps:
+      # O zizmor recomenda fixar as actions pelo SHA do commit. Troque @v4 pelo SHA que você conferir.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # o safemerge precisa do histórico para achar o ponto de partida
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # Troque <dono>/safemerge pelo repositório onde o safemerge for publicado (e fixe pelo SHA).
+      - uses: <dono>/safemerge@main
+        with:
+          test-command: npm test
+          fail-on: block

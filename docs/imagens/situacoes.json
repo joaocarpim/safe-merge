@@ -1,0 +1,67 @@
+[
+  {
+    "nome": "pode-mergear",
+    "branch": "feat/galeria-fotos",
+    "legenda": "Pode mergear: merge limpo, testes passaram no merge"
+  },
+  {
+    "nome": "conflito-de-texto",
+    "branch": "feat/desconto-orcamento",
+    "legenda": "Conflito de texto com o destino, mesma função em outro PR, branch atrasada"
+  },
+  {
+    "nome": "conflito-semantico",
+    "branch": "feat/recibo-pix",
+    "legenda": "Conflito semântico: merge limpo, testes quebram, função removida no destino"
+  },
+  {
+    "nome": "seguranca-e-deploy",
+    "branch": "feat/cobranca-pix",
+    "legenda": "Segurança e deploy: 7 problemas numa branch"
+  },
+  {
+    "nome": "workflow-perigoso",
+    "branch": "feat/ci-preview",
+    "legenda": "Workflow de CI perigoso (pull_request_target + injeção)"
+  },
+  {
+    "nome": "segredo-no-historico",
+    "branch": "feat/integracao-mercadopago",
+    "legenda": "Segredo apagado mas ainda no histórico"
+  },
+  {
+    "nome": "apagado-x-alterado",
+    "branch": "feat/relatorio-pdf",
+    "legenda": "Arquivo alterado aqui e apagado no destino"
+  },
+  {
+    "nome": "lockfile",
+    "branch": "chore/deps",
+    "legenda": "Conflito só em lockfile: aviso para regenerar"
+  },
+  {
+    "nome": "migracoes",
+    "branch": "feat/migracao-fotos",
+    "legenda": "Duas branches com migração de mesmo número"
+  },
+  {
+    "nome": "teste-instavel",
+    "branch": "feat/teste-instavel",
+    "legenda": "Teste instável: repetido antes de acusar"
+  },
+  {
+    "nome": "pr-empilhado",
+    "branch": "feat/agenda-notificacoes",
+    "legenda": "PR empilhado sobre outro PR aberto"
+  },
+  {
+    "nome": "renomeacao",
+    "branch": "fix/log-formato",
+    "legenda": "Destino renomeou o arquivo que a branch alterou"
+  },
+  {
+    "nome": "nada-a-mergear",
+    "branch": "feat/ja-mergeada",
+    "legenda": "Branch que já está no destino"
+  }
+]

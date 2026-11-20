@@ -1,0 +1,8 @@
+{
+  "name": "safemerge",
+  "version": "0.3.0",
+  "description": "Diz se a branch pode ser mergeada antes do merge: roda a CLI safemerge, interpreta o relatório e chama agentes de revisão, testes e resolução de conflito (que só propõem, nunca aplicam).",
+  "author": { "name": "Joao" },
+  "license": "MIT",
+  "keywords": ["merge", "conflito", "seguranca", "revisao", "testes"]
+}

@@ -1,0 +1,4 @@
+[
+  {"number": 88, "title": "Total nunca fica negativo", "headRefName": "fix/desconto-itens", "isDraft": false, "url": "", "author": {"login": "carlosdias"}},
+  {"number": 92, "title": "OS nasce com campo de agendamento", "headRefName": "feature/agenda-tecnico", "isDraft": false, "url": "", "author": {"login": "paularocha"}}
+]
