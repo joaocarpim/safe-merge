@@ -21,8 +21,8 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      # Troque <dono>/safemerge pelo repositório onde o safemerge for publicado (e fixe pelo SHA).
-      - uses: <dono>/safemerge@main
+      # Para produção, fixe pelo SHA do commit em vez da tag.
+      - uses: joaocarpim/safemerge@v0.3.0
         with:
           test-command: npm test
           fail-on: block

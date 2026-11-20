@@ -160,3 +160,16 @@ describe('pedido para a IA (--format prompt)', () => {
     assert.ok(v.ok, JSON.stringify(v.claims.filter((c) => c.status !== 'verified')));
   });
 });
+
+describe('hash de commit só de dígitos', () => {
+  it('é reconhecido como commit quando vem depois de "commit" (e inventado é pego)', () => {
+    const r = scenario();
+    const real = r.targets[0]!.conflicts[0]!.lastTouchOnTarget!.sha;
+    const fake = verifyText('Veio do commit 1234567 do dev.', r);
+    assert.equal(fake.ok, false);
+    assert.deepEqual(fake.claims.map((c) => [c.kind, c.status]), [['sha', 'unverified']]);
+    // número solto de 7 dígitos, sem a palavra commit, continua não sendo confundido com hash
+    assert.deepEqual(verifyText('O arquivo tem 1234567 linhas.', r).claims.filter((c) => c.kind === 'sha'), []);
+    assert.equal(verifyText(`commit ${real}`, r).claims[0]?.status, 'verified');
+  });
+});

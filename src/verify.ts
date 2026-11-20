@@ -121,8 +121,14 @@ export function verifyText(text: string, report: AnalysisReport): VerifyResult {
     push({ text: m[0], kind: 'finding-id', ...(ids.has(m[0]) ? { status: 'verified' } : { status: 'unverified', reason: 'id de achado que não existe no relatório' }) });
   }
   const withoutIds = text.replace(/\bSM-[0-9a-f]{8}\b/g, ' ');
-  for (const m of withoutIds.matchAll(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/g)) {
-    push({ text: m[0], kind: 'sha', ...(json.includes(m[0]) ? { status: 'verified' } : { status: 'unverified', reason: 'commit que não aparece no relatório' }) });
+  // hash com letra e dígito é inconfundível; hash só de dígitos (acontece em ~4% dos commits) só vale
+  // como citação quando vem depois da palavra "commit" ou "sha", para não confundir com um número.
+  const shaTokens = [
+    ...withoutIds.matchAll(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/g),
+    ...withoutIds.matchAll(/\b(?:commit|sha)\s+`?(\d{7,40})\b/gi),
+  ].map((m) => m[1] ?? m[0]);
+  for (const token of shaTokens) {
+    push({ text: token, kind: 'sha', ...(json.includes(token) ? { status: 'verified' } : { status: 'unverified', reason: 'commit que não aparece no relatório' }) });
   }
   for (const m of text.matchAll(/(?<![\w&])#(\d{1,6})\b/g)) {
     const n = Number(m[1]);

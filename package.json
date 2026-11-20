@@ -41,5 +41,14 @@
     "lgpd",
     "code-review",
     "cli"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joaocarpim/safemerge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joaocarpim/safemerge/issues"
+  },
+  "homepage": "https://github.com/joaocarpim/safemerge#readme",
+  "author": "Joao Carpim"
 }
