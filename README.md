@@ -14,6 +14,8 @@
   <img src="https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white" alt="Node 20+">
   <img src="https://img.shields.io/badge/depend%C3%AAncias-0-2f8a5b" alt="Zero dependências em produção">
   <a href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge"><img src="https://img.shields.io/visual-studio-marketplace/v/JooVitorAparecidoCarpimdeSouza.safemerge?label=VS%20Code&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge&ssr=false#review-details"><img src="https://img.shields.io/visual-studio-marketplace/r/JooVitorAparecidoCarpimdeSouza.safemerge?label=nota" alt="Nota no Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge"><img src="https://img.shields.io/visual-studio-marketplace/i/JooVitorAparecidoCarpimdeSouza.safemerge?label=instala%C3%A7%C3%B5es" alt="Instalações"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-MIT-3e5f9e" alt="MIT"></a>
   <a href="https://github.com/joaocarpim/safe-merge/stargazers"><img src="https://img.shields.io/github/stars/joaocarpim/safe-merge?style=flat" alt="Estrelas"></a>
 </p>
@@ -24,6 +26,10 @@
   <a href="#o-que-ele-analisa">O que analisa</a> ·
   <a href="#todas-as-situações">Galeria</a> ·
   <a href="docs/CAPACIDADES.md">Referência completa</a>
+</p>
+
+<p align="center">
+  <sub>Gostou? Deixe uma ⭐ no repositório e uma avaliação na <a href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge&ssr=false#review-details">extensão</a>. Ajuda o projeto a chegar em mais gente.</sub>
 </p>
 
 <p align="center">
@@ -474,6 +480,15 @@ node scripts/screenshots.mjs  # regenera as imagens deste README (Edge ou Chrome
 
 Contribuições são bem-vindas: abra uma issue com o caso (de preferência um repositório mínimo que reproduza)
 ou um PR com teste.
+
+## Apoie o projeto
+
+O safemerge é gratuito e de código aberto. Se ele te poupou de um merge quebrado, o que mais ajuda é simples e leva menos de um minuto:
+
+- ⭐ **Dê uma estrela** neste repositório: [github.com/joaocarpim/safe-merge](https://github.com/joaocarpim/safe-merge). É o que faz o projeto aparecer para mais gente.
+- 👍 **Avalie a extensão** no VS Code Marketplace, com nota e um comentário curto: abra a [página da extensão](https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge&ssr=false#review-details), entre na aba **Ratings & Review** e clique em **Write a review**. Quem está procurando uma ferramenta decide olhando a nota.
+- 📣 **Conte para o seu time** ou compartilhe nas redes: o link é `https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge`.
+- 🐛 **Abra uma issue** quando algo errar, de preferência com um repositório mínimo que reproduza. Alarme falso e caso não coberto são os relatos mais valiosos.
 
 ## Licença
 
