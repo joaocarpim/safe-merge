@@ -4,6 +4,8 @@ import { findingWhere, kindLabel, semanticWhy, verdictTitle } from './common.js'
 export interface PromptOptions {
   /** Caminho do report.json, para a IA conferir a própria resposta com verify-text. */
   reportPath?: string;
+  /** Caminho do cli.js que gerou o relatório: para rodar o safemerge quando o comando não está instalado. */
+  cliPath?: string;
 }
 
 /**
@@ -19,6 +21,10 @@ export function renderPrompt(report: AnalysisReport, opts: PromptOptions = {}): 
   const line = (s = '') => out.push(s);
 
   line(`Me ajude a resolver o que o safemerge encontrou antes de mergear \`${head}\` em \`${target}\`.`);
+  line();
+  line('Como rodar o safemerge: use o comando `safemerge` se ele existir no terminal.');
+  if (opts.cliPath) line(`Se não existir (por exemplo, a CLI veio embutida numa extensão), troque \`safemerge\` por \`node "${opts.cliPath}"\` (precisa do Node 20 ou mais novo).`);
+  else line('Se não existir, instale com `npm install -g github:joaocarpim/safe-merge` ou use `npx`.');
   line();
   line('Regras:');
   line('- Não aplique nenhuma mudança sem eu confirmar. Proponha, mostre o diff e espere.');

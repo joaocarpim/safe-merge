@@ -173,3 +173,15 @@ describe('hash de commit só de dígitos', () => {
     assert.equal(verifyText(`commit ${real}`, r).claims[0]?.status, 'verified');
   });
 });
+
+describe('pedido para a IA sem o comando instalado', () => {
+  it('diz como rodar o safemerge quando a CLI veio embutida (caminho do cli.js)', async () => {
+    const { renderPrompt } = await import('../src/render/prompt.ts');
+    const r = scenario();
+    const cli = 'C:/ext/cli/dist/cli.js';
+    const withPath = renderPrompt(r, { reportPath: 'r.json', cliPath: cli });
+    assert.ok(withPath.includes('troque `safemerge` por `node "' + cli + '"`'), 'deve mostrar o comando com o caminho do cli.js');
+    assert.ok(renderPrompt(r).includes('npm install -g github:joaocarpim/safe-merge'));
+    assert.ok(verifyText(withPath, r).ok, 'o próprio pedido continua passando no verify-text');
+  });
+});

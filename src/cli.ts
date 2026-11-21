@@ -160,7 +160,7 @@ async function runAnalyze(argv: string[]): Promise<number> {
     // para compartilhar: texto puro e um pedido pronto para qualquer assistente de IA
     writeFileSync(join(runDir, 'report.txt'), renderText(report, { color: false }));
     const { renderPrompt } = await import('./render/prompt.js');
-    writeFileSync(join(runDir, 'report.prompt.md'), renderPrompt(report, { reportPath: join(runDir, 'report.json') }));
+    writeFileSync(join(runDir, 'report.prompt.md'), renderPrompt(report, { reportPath: join(runDir, 'report.json'), cliPath: process.argv[1] }));
   }
   if (values.sarif) writeFileSync(values.sarif, renderSarif(report, VERSION));
 
