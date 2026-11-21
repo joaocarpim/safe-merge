@@ -5,7 +5,7 @@ import { git, isAncestor, repoRoot } from './git.js';
 import type { ToolRunner } from './tools.js';
 
 /** Colunas da matriz, na ordem em que aparecem. */
-export const MATRIX_CATEGORIES = ['secret', 'supply-chain', 'ci', 'sast', 'migration', 'env', 'semantic', 'tenant', 'auth', 'lgpd'] as const;
+export const MATRIX_CATEGORIES = ['secret', 'supply-chain', 'ci', 'sast', 'migration', 'env', 'semantic', 'tenant', 'auth', 'lgpd', 'runtime', 'risk', 'hygiene', 'process', 'branch'] as const;
 
 export const CATEGORY_LABEL: Record<(typeof MATRIX_CATEGORIES)[number], string> = {
   secret: 'segredos',
@@ -18,6 +18,11 @@ export const CATEGORY_LABEL: Record<(typeof MATRIX_CATEGORIES)[number], string> 
   tenant: 'tenant',
   auth: 'autenticação',
   lgpd: 'LGPD',
+  runtime: 'símbolos',
+  risk: 'riscos',
+  hygiene: 'higiene',
+  process: 'processo',
+  branch: 'branch',
 };
 
 export interface MatrixCell {
@@ -113,6 +118,8 @@ export function matrix(opts: MatrixOptions): MatrixResult {
         if (!cell || f.level === 'info') continue;
         cell[f.level]++;
       }
+      // motivos que não são achados nem conflito (atrasada, mesma função, stack de PR): coluna "branch"
+      for (const x of r.verdict.reasons) if (x.level !== 'info' && !x.text.startsWith('[SM-') && !/conflit|testes/.test(x.text)) cells.branch![x.level]++;
       const t = r.targets[0];
       if (r.semantic[0]?.status === 'failed' && r.semantic[0].cause === 'semantic-conflict') cells.semantic!.block++;
       return {

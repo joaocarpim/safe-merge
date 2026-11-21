@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { analyze, UsageError, type AnalysisReport, type Level } from './analyze.js';
 import { loadConfig, mergeConfig } from './config.js';
@@ -10,6 +10,7 @@ import { repoProblem, repoRoot, isGitRepo } from './git.js';
 import { renderMarkdown } from './render/markdown.js';
 import { renderText } from './render/text.js';
 import { renderSarif } from './sarif.js';
+import { detectTestCommand } from './testcmd.js';
 import { VERSION } from './version.js';
 
 const HELP = `safemerge ${VERSION}: diz se a sua branch pode ser mergeada antes do merge acontecer.
@@ -22,6 +23,8 @@ Uso:
   safemerge install-hook             instala o hook pre-push do git neste repositório
   safemerge render --report <json>   formata um relatório salvo (text, markdown, html, sarif, github)
   safemerge matrix [--base dev]      todas as branches abertas × categoria (conflito, segurança, deploy)
+  safemerge workspace [pasta]        vários repositórios de uma vez (front e back…); --all-branches = todas
+                                     (rodar safemerge numa pasta com repositórios dentro faz o mesmo)
 
 Opções de analyze:
   --head <branch>      Branch a analisar (padrão: a branch atual)
@@ -34,7 +37,7 @@ Opções de analyze:
   --prs-file <json>    Usa PRs deste arquivo (mesmo formato do "gh pr list --json") em vez do gh
   --body <texto>       Descrição do PR (quando não há PR aberto ou sem gh); confere deploy, seções…
   --body-file <arq>    Igual a --body, lendo de um arquivo
-  --test-cmd <cmd>     Roda este comando de testes no resultado do merge
+  --test-cmd <cmd>     Roda este comando de testes no resultado do merge ("auto": o detectado no projeto)
   --build-cmd <cmd>    Roda este build antes dos testes no resultado do merge
   --isolation <modo>   auto (padrão: Docker sem rede se houver), docker (exige) ou none
   --no-security        Pula a fase de segurança e deploy
@@ -147,7 +150,7 @@ async function runAnalyze(argv: string[]): Promise<number> {
     overlap: !values['no-overlap'],
     usePrs: !values['no-prs'],
     listPrs,
-    testCommand: values['test-cmd'],
+    testCommand: resolveTestCmd(values['test-cmd'], root),
     buildCommand: values['build-cmd'],
     security: !values['no-security'],
     emit: emitter?.emit,
@@ -346,7 +349,7 @@ async function runMatrix(argv: string[]): Promise<number> {
   const { matrix, renderMatrixText, renderMatrixMarkdown } = await import('./matrix.js');
   let result;
   try {
-    result = matrix({ cwd: root, cfg: loadConfig(root, values.config), base: values.base, limit, fetch: !values['no-fetch'], testCommand: values['test-cmd'] ?? null, security: !values['no-security'] });
+    result = matrix({ cwd: root, cfg: loadConfig(root, values.config), base: values.base, limit, fetch: !values['no-fetch'], testCommand: resolveTestCmd(values['test-cmd'], root) ?? null, security: !values['no-security'] });
   } catch (err) {
     throw new UsageError((err as Error).message);
   }
@@ -354,6 +357,67 @@ async function runMatrix(argv: string[]): Promise<number> {
   if (values.out) writeFileSync(values.out, output);
   else process.stdout.write(output);
   return 0;
+}
+
+/** --test-cmd auto: o comando de testes detectado no repositório (escolha explícita de quem roda). */
+function resolveTestCmd(value: string | undefined, root: string): string | undefined {
+  if (value !== 'auto') return value;
+  const found = detectTestCommand(root);
+  process.stderr.write(found ? `testes: usando "${found}" (detectado no projeto)\n` : 'testes: nenhum comando de testes detectado; seguindo sem testes\n');
+  return found ?? undefined;
+}
+
+const WORKSPACE_HELP = `Uso: safemerge workspace [pasta] [opções]   (ou rode safemerge numa pasta com vários repositórios)
+
+Acha os repositórios git até 3 níveis abaixo da pasta (ex.: front e back) e analisa todos ao mesmo tempo.
+
+  --all-branches       Todas as branches abertas de cada repositório (matrix), não só a atual
+  --jobs <n>           Repositórios ao mesmo tempo (padrão: 4)
+  --depth <n>          Níveis de pasta para procurar (padrão: 3)
+  --format <f>         text (padrão), markdown ou json
+  --out <arquivo>      Grava a saída no arquivo
+  --fail-on <nível>    block (padrão), warn ou never
+  Outras opções vão para a análise de cada repositório, ex.: --no-fetch, --base develop,
+  --test-cmd auto (usa o comando de testes detectado em cada repositório).
+`;
+
+async function runWorkspace(argv: string[], rootArg?: string): Promise<number> {
+  const own = new Set(['--all-branches']);
+  const withValue = new Set(['--jobs', '--depth', '--format', '--out', '--fail-on']);
+  const values: Record<string, string> = { '--jobs': '4', '--depth': '3', '--format': 'text', '--fail-on': 'block' };
+  const flags = new Set<string>();
+  const forward: string[] = [];
+  let folder = rootArg;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    if (a === '-h' || a === '--help') {
+      process.stdout.write(WORKSPACE_HELP);
+      return 0;
+    }
+    if (own.has(a)) flags.add(a);
+    else if (withValue.has(a)) values[a] = argv[++i] ?? '';
+    else if (!a.startsWith('-') && folder === undefined && forward.length === 0) folder = a;
+    else forward.push(a);
+  }
+  const format = values['--format']!;
+  if (!['text', 'markdown', 'json'].includes(format)) throw new UsageError(`formato inválido para vários repositórios: ${format} (use text, markdown ou json)`);
+  const failOn = values['--fail-on']!;
+  if (!['block', 'warn', 'never'].includes(failOn)) throw new UsageError(`valor inválido para --fail-on: ${failOn}`);
+  const jobs = Number.parseInt(values['--jobs']!, 10);
+  const depth = Number.parseInt(values['--depth']!, 10);
+  if (!(jobs >= 1) || !(depth >= 0)) throw new UsageError('--jobs e --depth precisam ser números');
+  const root = resolve(folder ?? process.cwd());
+  const { analyzeWorkspace, findRepos, renderWorkspaceMarkdown, renderWorkspaceText, workspaceLevel } = await import('./workspace.js');
+  const repos = findRepos(root, depth);
+  if (repos.length === 0) throw new UsageError(`nenhum repositório git em ${root} (procurei até ${depth} níveis de pasta)`);
+  process.stderr.write(`safemerge: ${repos.length} repositório(s) encontrado(s): ${repos.map((r) => r.relative).join(', ')}; analisando ${Math.min(jobs, repos.length)} por vez\n`);
+  const result = await analyzeWorkspace({ root, allBranches: flags.has('--all-branches'), forward, jobs, depth });
+  const output = format === 'json' ? `${JSON.stringify(result, null, 2)}\n` : format === 'markdown' ? renderWorkspaceMarkdown(result) : renderWorkspaceText(result);
+  if (values['--out']) writeFileSync(values['--out'], output);
+  else process.stdout.write(output);
+  const level = workspaceLevel(result);
+  if (level === 'error') return 2;
+  return failOn !== 'never' && levelRank(level) >= levelRank(failOn as Level) ? 1 : 0;
 }
 
 type Command = (argv: string[]) => Promise<number>;
@@ -366,6 +430,7 @@ const COMMANDS: Record<string, () => Promise<Command>> = {
   'install-hook': async () => runInstallHook,
   render: async () => runRender,
   matrix: async () => runMatrix,
+  workspace: async () => runWorkspace,
 };
 
 /** Opção que o Electron/VS Code exige para rodar um script como Node. Não é nossa: é ignorada. */
@@ -382,6 +447,11 @@ async function main(rawArgv: string[]): Promise<number> {
     return 2;
   }
   try {
+    // pasta que não é repositório, mas tem repositórios dentro (front e back): analisa todos de uma vez
+    if (name === 'analyze' && !argv.includes('--head') && repoProblem(process.cwd())?.includes('não é um repositório git')) {
+      const { findRepos } = await import('./workspace.js');
+      if (findRepos(process.cwd()).length > 0) return await runWorkspace(isCommand ? argv.slice(1) : argv);
+    }
     const cmd = await load();
     return await cmd(isCommand ? argv.slice(1) : argv);
   } catch (err) {

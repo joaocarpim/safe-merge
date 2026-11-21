@@ -52,8 +52,15 @@ export function syntaxCheck(path: string, text: string, dir: string): Resolution
     }
   }
   if (['.js', '.cjs', '.mjs'].includes(ext)) {
-    const res = spawnSync(process.execPath, ['--check', join(dir, path)], { encoding: 'utf8', timeout: 30_000 });
-    return { name: `sintaxe ${path}`, ok: res.status === 0, detail: res.status === 0 ? undefined : (res.stderr ?? '').split(dir).join('.').trim().split('\n').slice(0, 5).join('\n') };
+    // dentro do VS Code, process.execPath é o Electron: só roda como Node com a variável e a opção abaixo
+    const electron = Boolean(process.versions.electron);
+    const res = spawnSync(process.execPath, [...(electron ? ['--ms-enable-electron-run-as-node'] : []), '--check', join(dir, path)], {
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: electron ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' } : process.env,
+    });
+    const why = (res.stderr || res.error?.message || `saiu com código ${res.status}`).split(dir).join('.').trim().split('\n').slice(0, 5).join('\n');
+    return { name: `sintaxe ${path}`, ok: res.status === 0, detail: res.status === 0 ? 'ok' : why };
   }
   return null;
 }

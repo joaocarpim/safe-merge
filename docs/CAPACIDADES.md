@@ -144,6 +144,14 @@ Bloqueia só o que tem arquivo, linha, evidência e gravidade/confiança acima d
 `blockConfidence`. Heurística de **baixa confiança** (por nome ou texto) vira **observação** e não muda o
 veredito, a não ser que a gravidade seja alta: "mergear com atenção" fica para o que vale a pena ler.
 
+## 6c. Vários repositórios de uma vez (front e back)
+
+Rodando `safemerge` numa pasta que não é repositório mas tem repositórios dentro (até 3 níveis), ele acha
+todos e analisa ao mesmo tempo, um processo por repositório (`--jobs`, padrão 4), e junta o resultado. O
+veredito geral é o mais grave. `--all-branches` roda a matriz (todas as branches abertas) em cada um;
+`--test-cmd auto` usa o comando de testes detectado em cada repositório. Também como `safemerge workspace`.
+Não cruza um repositório com o outro (contrato de API entre front e back não é verificado).
+
 ## 7. IA com verificação (plugin do Claude Code)
 
 | Comando | O que garante |
