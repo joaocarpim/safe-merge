@@ -152,6 +152,19 @@ veredito geral é o mais grave. `--all-branches` roda a matriz (todas as branche
 `--test-cmd auto` usa o comando de testes detectado em cada repositório. Também como `safemerge workspace`.
 Não cruza um repositório com o outro (contrato de API entre front e back não é verificado).
 
+## 6d. Plano para mergear e ordem de merge
+
+**Plano por branch** (no relatório, em `plan`, e no Markdown): o que fazer, em ordem, para a branch poder
+entrar. Sai só do relatório, sem IA: cada passo vem de um conflito, teste ou achado, com arquivo, linha,
+evidência e comando quando existem. Ordem fixa: o que precisa entrar antes (stack), atualizar a branch,
+conflitos (lockfile: regenerar), testes, bloqueios, avisos, combinar com quem mexe nos mesmos arquivos,
+sugestões e analisar de novo. Observações não viram passo.
+
+**Ordem de merge** (no `safemerge matrix`): todas as branches abertas em sequência. Stacks respeitadas (a
+base antes); entre as livres, primeiro quem já pode mergear, depois quem pede atenção, por último quem
+precisa de trabalho. Em cada par que conflita, diz quem resolve o conflito (quem entra depois).
+Sem estimativa de tempo nem nota de prioridade.
+
 ## 7. IA com verificação (plugin do Claude Code)
 
 | Comando | O que garante |

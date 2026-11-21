@@ -3,6 +3,7 @@ import { detectBranches, fetchRemote, listBranches, pickRemote } from './branche
 import type { Config } from './config.js';
 import { git, isAncestor, repoRoot } from './git.js';
 import type { ToolRunner } from './tools.js';
+import { mergeOrder, renderOrderText, type OrderStep } from './plan.js';
 
 /** Colunas da matriz, na ordem em que aparecem. */
 export const MATRIX_CATEGORIES = ['secret', 'supply-chain', 'ci', 'sast', 'migration', 'env', 'semantic', 'tenant', 'auth', 'lgpd', 'runtime', 'risk', 'hygiene', 'process', 'branch'] as const;
@@ -45,6 +46,10 @@ export interface MatrixRow {
   cells: Record<string, MatrixCell>;
   /** Verificações sem cobertura nesta branch. */
   uncovered: number;
+  /** Branches desta matriz sobre as quais esta está empilhada (entram antes). */
+  after: string[];
+  /** Branches desta matriz com que esta vai conflitar. */
+  conflictsWith: string[];
   error?: string;
 }
 
@@ -53,6 +58,8 @@ export interface MatrixResult {
   base: string;
   rows: MatrixRow[];
   skipped: { branch: string; reason: string }[];
+  /** Ordem de merge sugerida (stacks primeiro; entre as livres, quem já pode, depois avisos, depois bloqueadas). */
+  order: OrderStep[];
 }
 
 export interface MatrixOptions {
@@ -132,14 +139,16 @@ export function matrix(opts: MatrixOptions): MatrixResult {
         tests: r.semantic[0] && r.semantic[0].status !== 'skipped' ? r.semantic[0].status : null,
         cells,
         uncovered: r.coverage.filter((c) => c.status === 'missing-tool' || c.status === 'error').length,
+        after: r.overlaps.filter((o) => o.relation === 'ours-contains-theirs').map((o) => o.branch),
+        conflictsWith: r.overlaps.filter((o) => o.wouldConflict).map((o) => o.branch),
       };
     } catch (err) {
-      return { branch: b.name, level: 'error', conflicts: 0, conflictsLockfileOnly: false, otherConflicts: 0, behind: 0, tests: null, cells: {}, uncovered: 0, error: (err as Error).message.split('\n')[0] };
+      return { branch: b.name, level: 'error', conflicts: 0, conflictsLockfileOnly: false, otherConflicts: 0, behind: 0, tests: null, cells: {}, uncovered: 0, after: [], conflictsWith: [], error: (err as Error).message.split('\n')[0] };
     }
   });
   const rank = { block: 0, error: 1, warn: 2, ok: 3 } as const;
   rows.sort((a, b) => rank[a.level] - rank[b.level] || a.branch.localeCompare(b.branch));
-  return { schema: 1, base: base.name, rows, skipped };
+  return { schema: 1, base: base.name, rows, skipped, order: mergeOrder(rows.map((r) => ({ branch: r.branch, level: r.level, after: r.after, conflictsWith: r.conflictsWith }))) };
 }
 
 /** Só as categorias com algo em alguma branch (a tabela cabe no terminal). */
@@ -172,6 +181,7 @@ export function renderMatrixText(m: MatrixResult): string {
   const uncovered = Math.max(0, ...m.rows.map((r) => r.uncovered));
   out.push('', `✗ bloqueia · ! aviso · · nada${uncovered ? ` · até ${uncovered} verificação(ões) sem cobertura por branch (rode safemerge na branch para ver quais)` : ''}`);
   if (m.skipped.length) out.push(`fora da matriz: ${m.skipped.map((s) => `${s.branch} (${s.reason})`).join(', ')}`);
+  if (m.order?.length) out.push('', renderOrderText(m.order, m.base));
   return `${out.join('\n')}\n`;
 }
 
@@ -185,5 +195,6 @@ export function renderMatrixMarkdown(m: MatrixResult): string {
     out.push(`| \`${r.branch}\` | ${md[r.level]} | ${r.conflicts ? `${r.conflicts}${r.conflictsLockfileOnly ? ' (lockfile)' : ''}` : '·'} | ${r.otherConflicts || '·'} | ${r.tests ?? '–'} | ${cats.map((c) => cellText(r.cells[c], { block: '❌', warn: '⚠️' })).join(' | ')} |`);
   }
   if (m.skipped.length) out.push('', `_Fora da matriz: ${m.skipped.map((s) => `\`${s.branch}\` (${s.reason})`).join(', ')}_`);
+  if (m.order?.length) out.push('', `### Ordem de merge sugerida em \`${m.base}\``, '', ...m.order.map((s) => `${s.n}. \`${s.branch}\` ${md[s.level] ?? ''} — ${s.note}`));
   return `${out.join('\n')}\n`;
 }

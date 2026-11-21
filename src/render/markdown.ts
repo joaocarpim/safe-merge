@@ -1,4 +1,5 @@
 import type { AnalysisReport } from '../analyze.js';
+import { renderPlanMarkdown } from '../plan.js';
 import {
   ageLabel,
   confidenceLabel,
@@ -163,6 +164,10 @@ export function renderMarkdown(report: AnalysisReport): string {
     line();
   }
 
+  if (report.plan?.length) {
+    out.push(renderPlanMarkdown(report.plan, report.head.name, report.primary).trimEnd());
+    line();
+  }
   for (const w of report.warnings) line(`_aviso: ${w}_`);
   line(`_${plural(report.targets.length, 'destino analisado', 'destinos analisados')} · somente leitura_`);
   return `${out.join('\n')}\n`;

@@ -19,6 +19,7 @@ import { simulateMerge, type MergeResult } from './merge.js';
 import { findOverlaps, type OverlapEntry } from './overlap.js';
 import { compileRegexes } from './config.js';
 import { detectTestCommand } from './testcmd.js';
+import { buildPlan, type PlanStep } from './plan.js';
 import { semanticCheck, type SemanticResult } from './semantic.js';
 import { SECURITY_CHECKS, type Check, type CheckContext, type CheckOutput } from './checks/index.js';
 import { finalizeFindings, type CoverageEntry, type Finding, type FindingDraft } from './findings.js';
@@ -93,6 +94,8 @@ export interface AnalysisReport {
   divergence: Divergence[];
   warnings: string[];
   verdict: Verdict;
+  /** O que fazer, em ordem, para esta branch poder entrar (calculado do relatório, sem IA). */
+  plan: PlanStep[];
   durationMs: number;
 }
 
@@ -558,9 +561,11 @@ export function analyze(opts: AnalyzeOptions): AnalysisReport {
     divergence,
     warnings,
     verdict: { level: 'ok', reasons: [] },
+    plan: [],
     durationMs: 0,
   };
   report.verdict = buildVerdict(report, cfg);
+  report.plan = buildPlan(report, { warnBehindCommits: cfg.warnBehindCommits });
   for (const r of report.verdict.reasons) report.summary.reasons[r.level]++;
   report.durationMs = Date.now() - started;
   emit({ type: 'run.end', level: report.verdict.level, reasons: report.verdict.reasons.filter((r) => r.level !== 'info').map((r) => r.text) });

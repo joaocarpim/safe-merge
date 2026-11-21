@@ -107,6 +107,13 @@ export function renderPrompt(report: AnalysisReport, opts: PromptOptions = {}): 
     line();
   }
 
-  line('Responda com: (1) a lista do que bloqueia e do que é aviso, (2) a proposta para cada item, (3) o resultado do verify-resolution para cada conflito.');
+  const plan = (report.plan ?? []).filter((p) => p.kind !== 'done');
+  if (plan.length) {
+    line('## Plano do safemerge (siga nesta ordem)');
+    for (const p of plan) line(`${p.n}. ${p.title}${p.file ? ` (${p.file}${p.line ? `:${p.line}` : ''})` : ''}${p.command ? ` — \`${p.command}\`` : ''}`);
+    line();
+  }
+
+  line('Responda com: (1) a lista do que bloqueia e do que é aviso, (2) a proposta para cada item, seguindo a ordem do plano, (3) o resultado do verify-resolution para cada conflito.');
   return `${out.join('\n')}\n`;
 }
