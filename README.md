@@ -13,6 +13,7 @@
   <a href="https://github.com/joaocarpim/safe-merge/actions/workflows/ci.yml"><img src="https://github.com/joaocarpim/safe-merge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white" alt="Node 20+">
   <img src="https://img.shields.io/badge/depend%C3%AAncias-0-2f8a5b" alt="Zero dependências em produção">
+  <a href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge"><img src="https://img.shields.io/visual-studio-marketplace/v/JooVitorAparecidoCarpimdeSouza.safemerge?label=VS%20Code&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-MIT-3e5f9e" alt="MIT"></a>
   <a href="https://github.com/joaocarpim/safe-merge/stargazers"><img src="https://img.shields.io/github/stars/joaocarpim/safe-merge?style=flat" alt="Estrelas"></a>
 </p>
@@ -109,7 +110,7 @@ Sem elas, o safemerge usa regras internas e diz isso no relatório.
 | Forma | Para quem | Começa em |
 | --- | --- | --- |
 | [1. Terminal](#1-terminal) | quem quer o veredito antes de abrir o PR | 1 comando |
-| [2. Extensão do VS Code](#2-extensão-do-vs-code) | quem quer ver o conflito dentro do código | instalar o `.vsix` |
+| [2. Extensão do VS Code](#2-extensão-do-vs-code) | quem quer ver o conflito dentro do código | instalar pela aba Extensões |
 | [3. Com o seu assistente de IA](#3-com-o-seu-assistente-de-ia) | quem usa Claude Code, Cursor, Copilot… | colar um pedido |
 | [4. Hook pre-push](#4-hook-pre-push) | quem quer ser barrado antes de enviar | 1 comando |
 | [5. GitHub Actions](#5-github-actions) | o time inteiro, em todo PR | 1 arquivo |
@@ -171,13 +172,14 @@ salvar e mandar para a IA, e um som quando pode mergear.
 
 **Instalação:**
 
-1. Baixe o `safemerge-0.3.0.vsix` na página de [Releases](https://github.com/joaocarpim/safe-merge/releases).
-2. Instale:
+1. No VS Code, abra **Extensões** (`Ctrl+Shift+X`), procure por **safemerge** e clique em **Instalar**. Ou, pelo terminal:
    ```bash
-   code --install-extension safemerge-0.3.0.vsix
+   code --install-extension JooVitorAparecidoCarpimdeSouza.safemerge
    ```
-   ou, no VS Code: **Extensões** → `⋯` → **Instalar do VSIX…**
-3. Abra a pasta de um repositório git, clique no **escudo** na barra lateral e em **Analisar branch**.
+   Também está no [Marketplace](https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge).
+2. Abra a pasta de um repositório git, clique no **escudo** na barra lateral e em **Analisar branch**.
+
+Sem acesso ao Marketplace? Baixe o `safemerge-0.3.0.vsix` na página de [Releases](https://github.com/joaocarpim/safe-merge/releases) e use **Extensões** → `⋯` → **Instalar do VSIX…**.
 
 | Conflito no código, na aba Problemas e na barra de status | CodeLens e hover com o código do destino e como era antes |
 | --- | --- |
