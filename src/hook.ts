@@ -71,5 +71,7 @@ export function installHook(repoDir: string, command: string[], opts: { force?: 
 export function currentCommand(): string[] {
   const script = process.argv[1];
   if (!script) return ['safemerge'];
-  return [process.execPath, ...process.execArgv, script];
+  // Rodando no Node embutido de um editor (Electron), o programa só age como Node com esta opção
+  const electron = process.versions.electron ? ['--ms-enable-electron-run-as-node'] : [];
+  return [process.execPath, ...process.execArgv, script, ...electron];
 }

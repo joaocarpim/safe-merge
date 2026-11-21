@@ -325,6 +325,13 @@ describe('CLI', () => {
     assert.equal(repo.git('status', '--porcelain'), '', '--save não pode sujar o repositório');
   });
 
+  it('ignora a opção que o Electron exige para rodar como Node (extensão do editor)', () => {
+    conflictScenario();
+    const res = cli(repo.dir, '--ms-enable-electron-run-as-node', '--no-fetch', '--no-prs', '--format', 'json');
+    assert.equal(res.status, 1, res.stderr);
+    assert.equal(JSON.parse(res.stdout).verdict.level, 'block');
+  });
+
   it('sai com 2 fora de um repositório e em opção inválida', () => {
     repo = baseRepo();
     const outside = mkdtempSync(join(tmpdir(), 'sm-fora-')); // `/tmp` não existe no Windows

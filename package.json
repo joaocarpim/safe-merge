@@ -1,6 +1,6 @@
 {
   "name": "safemerge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Diz se a sua branch pode ser mergeada antes do merge: conflitos (inclusive com outros PRs e semânticos), segurança e riscos do que a branch introduz.",
   "type": "module",
   "bin": {

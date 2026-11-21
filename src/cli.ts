@@ -363,7 +363,11 @@ const COMMANDS: Record<string, () => Promise<Command>> = {
   matrix: async () => runMatrix,
 };
 
-async function main(argv: string[]): Promise<number> {
+/** Opção que o Electron/VS Code exige para rodar um script como Node. Não é nossa: é ignorada. */
+const ELECTRON_FLAG = '--ms-enable-electron-run-as-node';
+
+async function main(rawArgv: string[]): Promise<number> {
+  const argv = rawArgv.filter((a) => a !== ELECTRON_FLAG);
   const first = argv[0];
   const isCommand = first !== undefined && !first.startsWith('-');
   const name = isCommand ? first : 'analyze';
