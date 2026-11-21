@@ -214,6 +214,8 @@ export interface OrderInput {
   after: string[];
   /** Branches (desta mesma lista) com que esta vai conflitar. */
   conflictsWith: string[];
+  /** Branches com migração de mesmo número. */
+  migrationWith?: string[];
 }
 
 export interface OrderStep {
@@ -248,6 +250,8 @@ export function mergeOrder(rows: OrderInput[]): OrderStep[] {
     const notes: string[] = [];
     if (next.after.length) notes.push(`empilhada: entra depois de ${next.after.join(', ')}`);
     if (earlierConflicts.length) notes.push(`resolve o conflito com ${earlierConflicts.join(', ')} (que entrou antes)`);
+    const earlierMigrations = (next.migrationWith ?? []).filter((c) => placed.includes(c));
+    if (earlierMigrations.length) notes.push(`renumera a migração (mesmo número que ${earlierMigrations.join(', ')}, que entrou antes)`);
     if (next.level === 'block') notes.push('precisa de trabalho antes (veja o plano da branch)');
     if (next.level === 'error') notes.push('a análise falhou nesta branch');
     out.push({ n: out.length + 1, branch: next.branch, level: next.level, after: next.after, conflictsWith: next.conflictsWith, note: notes.join('; ') || (next.level === 'ok' ? 'pode entrar já' : 'pode entrar depois de conferir os avisos') });

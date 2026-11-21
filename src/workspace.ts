@@ -4,6 +4,10 @@ import { basename, join } from 'node:path';
 import type { AnalysisReport } from './analyze.js';
 import type { MatrixResult } from './matrix.js';
 import { renderMatrixMarkdown, renderMatrixText } from './matrix.js';
+import { detectBranches, listBranches, pickRemote } from './branches.js';
+import { loadConfig } from './config.js';
+import { crossCheck, type ContractIssue, type RepoSide } from './contract.js';
+import { git } from './git.js';
 
 /**
  * Pasta com vários repositórios (ex.: front e back lado a lado): acha todos e analisa ao mesmo tempo,
@@ -74,6 +78,8 @@ export interface WorkspaceResult {
   root: string;
   mode: 'current-branch' | 'all-branches';
   entries: WorkspaceEntry[];
+  /** Rotas de API que uma branch muda e outro repositório usa (front × back). */
+  contracts: ContractIssue[];
   durationMs: number;
 }
 
@@ -96,7 +102,7 @@ export function selfCommand(): { command: string; args: string[] } {
   return { command: process.execPath, args: [...(electron ? ['--ms-enable-electron-run-as-node'] : []), ...process.execArgv, process.argv[1]!] };
 }
 
-function runChild(cmd: { command: string; args: string[] }, cwd: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+export function runChild(cmd: { command: string; args: string[] }, cwd: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(cmd.command, [...cmd.args, ...args], { cwd, windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } });
     let stdout = '';
@@ -135,7 +141,13 @@ export async function analyzeWorkspace(opts: WorkspaceOptions): Promise<Workspac
     }
   };
   await Promise.all(Array.from({ length: Math.max(1, Math.min(opts.jobs, repos.length)) }, worker));
-  return { schema: 1, root: opts.root, mode: opts.allBranches ? 'all-branches' : 'current-branch', entries, durationMs: Date.now() - started };
+  let contracts: ContractIssue[] = [];
+  try {
+    contracts = repos.length > 1 ? workspaceContracts(opts.root, { allBranches: opts.allBranches, depth: opts.depth }) : [];
+  } catch {
+    /* heurística: se falhar, segue sem */
+  }
+  return { schema: 1, root: opts.root, mode: opts.allBranches ? 'all-branches' : 'current-branch', entries, contracts, durationMs: Date.now() - started };
 }
 
 const VERDICT_TEXT = { ok: '✓ PODE MERGEAR', warn: '! MERGEAR COM ATENÇÃO', block: '✗ NÃO MERGEAR' } as const;
@@ -149,7 +161,7 @@ export function workspaceLevel(w: WorkspaceResult): 'ok' | 'warn' | 'block' | 'e
 }
 
 export function renderWorkspaceText(w: WorkspaceResult): string {
-  const out = [`safemerge · ${w.entries.length} repositório(s) em ${w.root} · ${w.mode === 'all-branches' ? 'todas as branches abertas' : 'branch atual de cada um'} · ${(w.durationMs / 1000).toFixed(1)}s`, ''];
+  const out = [`safemerge · ${w.entries.length} repositório(s) em ${basename(w.root)} · ${w.mode === 'all-branches' ? 'todas as branches abertas' : 'branch atual de cada um'} · ${(w.durationMs / 1000).toFixed(1)}s`, ''];
   for (const e of w.entries) {
     const title = `⏺ ${e.repo.relative}${e.repo.branch ? ` (${e.repo.branch})` : ''}`;
     if (e.error) {
@@ -170,6 +182,8 @@ export function renderWorkspaceText(w: WorkspaceResult): string {
       out.push(title, ...renderMatrixText(e.matrix).trimEnd().split('\n').map((l) => `  ${l}`), '');
     }
   }
+  if (w.contracts?.length) out.push(renderContractsText(w.contracts), '');
+  else if (w.entries.length > 1) out.push('Entre repositórios: nenhuma rota de API mudada por uma branch e usada por outro repositório (heurística por texto).', '');
   out.push('somente leitura: nenhuma branch foi alterada. Detalhes de um repositório: entre nele e rode safemerge.');
   return `${out.join('\n')}\n`;
 }
@@ -192,5 +206,57 @@ export function renderWorkspaceMarkdown(w: WorkspaceResult): string {
   } else {
     for (const e of w.entries) out.push(`### ${e.repo.relative}`, '', e.error ? `erro: ${e.error}` : renderMatrixMarkdown(e.matrix!), '');
   }
+  if (w.contracts?.length) out.push('', '### Entre repositórios (contrato de API, heurística)', ...w.contracts.map((x) => `- ⚠️ ${x.message}`));
   return `${out.join('\n')}\n`;
+}
+
+// ───────────────────────────── contrato de API entre repositórios ─────────────────────────────
+
+/**
+ * Cruza os repositórios dois a dois (cada um como back e como front). Modo "branch atual": a branch de
+ * cada um. Modo "todas": cada branch aberta do back (que mude rotas) com cada branch aberta do front.
+ */
+export function workspaceContracts(root: string, opts: { allBranches: boolean; depth?: number; maxAgeDays?: number }): ContractIssue[] {
+  const repos = findRepos(root, opts.depth ?? 3);
+  const sides = new Map<string, RepoSide[]>();
+  for (const r of repos) {
+    try {
+      const cfg = loadConfig(r.path);
+      const remote = pickRemote(r.path);
+      const branches = listBranches(r.path, remote);
+      const detected = detectBranches(r.path, cfg, branches);
+      const base = detected.integration ?? detected.default;
+      if (!base) continue;
+      const mains = new Set(detected.main.map((b) => b.name));
+      const nowSec = Date.now() / 1000;
+      const heads = opts.allBranches
+        ? [...branches.all.values()].filter((b) => !mains.has(b.name) && b.name !== base.name && (nowSec - (Number(git(r.path, ['log', '-1', '--format=%ct', b.ref]).stdout.trim()) || 0)) / 86400 <= (opts.maxAgeDays ?? cfg.overlap.maxAgeDays))
+        : r.branch && r.branch !== base.name
+          ? [branches.all.get(r.branch) ?? { name: r.branch, ref: `refs/heads/${r.branch}` }]
+          : [];
+      sides.set(r.path, heads.map((b) => ({ name: r.relative, cwd: r.path, branch: b.name, head: b.ref, base: base.ref })));
+    } catch {
+      /* repositório que não dá para ler: fica de fora */
+    }
+  }
+  const out: ContractIssue[] = [];
+  for (const a of repos) for (const b of repos) {
+    if (a.path === b.path) continue;
+    const backs = sides.get(a.path) ?? [];
+    const fronts = sides.get(b.path) ?? [];
+    // o front também conta na branch principal dele (o que já está lá chama a rota removida?)
+    for (const back of backs) for (const front of fronts.length ? fronts : []) out.push(...crossCheck(back, front));
+  }
+  const seen = new Set<string>();
+  return out.filter((x) => {
+    const k = `${x.kind}|${x.backRepo}|${x.backBranch}|${x.frontRepo}|${x.frontBranch}|${x.method}|${x.route}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+export function renderContractsText(issues: ContractIssue[]): string {
+  if (!issues.length) return '';
+  return ['Entre repositórios (contrato de API, heurística por texto):', ...issues.map((x) => `  ! ${x.message}\n      ${x.file}:${x.line}  ${x.evidence}`)].join('\n');
 }

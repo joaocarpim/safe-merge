@@ -22,7 +22,8 @@
     "dev": "node --import tsx src/cli.ts",
     "test:complex": "node --import tsx --test --test-reporter=spec test/complex/complex.test.ts",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "smoke": "node scripts/smoke-commands.mjs"
   },
   "license": "MIT",
   "devDependencies": {

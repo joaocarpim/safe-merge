@@ -25,6 +25,7 @@
   <a href="#formas-de-usar">Formas de usar</a> ·
   <a href="#o-que-ele-analisa">O que analisa</a> ·
   <a href="#todas-as-situações">Galeria</a> ·
+  <a href="docs/COMANDOS.md">Comandos</a> ·
   <a href="docs/CAPACIDADES.md">Referência completa</a>
 </p>
 
@@ -33,7 +34,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/imagens/relatorio-conflito-de-texto-escuro.png" width="860" alt="Relatório do safemerge: veredito Não mergear, motivos, números e o conflito em três colunas">
+  <img src="docs/imagens/vscode-painel.png" width="860" alt="safemerge no VS Code: veredito Não mergear, fases da análise, destinos, arquivos, PRs abertos e o gráfico de branches">
 </p>
 
 ---
@@ -64,6 +65,10 @@ O safemerge responde, **antes** do merge e **sem alterar nada** no seu repositó
 | 🧭 **Revisor sênior automático** | N+1, HTTP sem timeout, exceção engolida, SQL concatenado, migração destrutiva, LGPD, tenant, rota sem autenticação |
 | 📋 **Cobertura explícita** | cada verificação diz se rodou, rodou parcialmente, pulou ou ficou sem ferramenta. Nunca "0 problemas" sem ter verificado |
 | 🤖 **IA que propõe e é conferida** | gera o pedido para o seu assistente de IA e verifica a resposta e a resolução proposta antes de você aplicar |
+| 🗺️ **Plano para mergear** | o que fazer, em ordem, para a branch poder entrar: atualizar, resolver o conflito, corrigir o teste, cada passo com arquivo, linha, evidência e comando |
+| 🔢 **Ordem de merge do time** | todas as branches abertas em sequência: stacks respeitadas, quem pode entrar já e quem resolve cada conflito (em paralelo, com cache) |
+| 🧱 **Front e back juntos** | numa pasta com vários repositórios, analisa todos ao mesmo tempo e avisa quando o back muda uma rota que o front usa |
+| 📝 **Processo do PR** | migração sem passo de deploy na descrição, commits `fixup!`/WIP, PR grande, seções obrigatórias do time |
 | 🧩 **Onde você estiver** | terminal, extensão do VS Code, hook pre-push, GitHub Actions (com anotações no diff do PR), SARIF, Markdown, HTML |
 
 ## Medido
@@ -78,9 +83,11 @@ sem nenhuma ferramenta externa instalada:
 | Veredito certo | **18 de 18** branches |
 | Alarmes falsos | **0** |
 | Tempo por branch (Windows, com a suíte de testes no merge) | mediana **2,2 s** |
+| `safemerge matrix` nas 17 branches abertas | **42,2 s** uma por vez · **13,6 s** com 4 em paralelo · **1,2 s** repetindo sem mudanças (cache) |
+| Pasta com 2 repositórios (front e back) | **4,0 s** no total (o tempo do mais lento, não a soma de 5,7 s) |
 
-Reproduza com `npm run test:complex`. O cenário foi escrito junto com a ferramenta; o número que
-importa é o do seu repositório.
+Reproduza com `npm run test:complex` (acertividade) e `npm run smoke` (todos os comandos, 47 verificações).
+O cenário foi escrito junto com a ferramenta; o número que importa é o do seu repositório.
 
 ---
 
@@ -101,7 +108,7 @@ git clone https://github.com/joaocarpim/safe-merge.git
 cd safemerge
 npm install        # instala e compila
 npm link           # deixa o comando "safemerge" no terminal
-npm test           # 169 testes
+npm test           # 214 testes
 ```
 
 </details>
@@ -121,6 +128,7 @@ Sem elas, o safemerge usa regras internas e diz isso no relatório.
 | [4. Hook pre-push](#4-hook-pre-push) | quem quer ser barrado antes de enviar | 1 comando |
 | [5. GitHub Actions](#5-github-actions) | o time inteiro, em todo PR | 1 arquivo |
 | [6. Visão do time](#6-visão-do-time-matrix) | quem cuida de vários PRs | `safemerge matrix` |
+| [7. Front e back juntos](#7-front-e-back-juntos-vários-repositórios) | quem tem vários repositórios numa pasta | `safemerge` na pasta raiz |
 
 ### 1. Terminal
 
@@ -154,7 +162,10 @@ safemerge --no-fetch --no-prs          # sem rede
 safemerge --body-file descricao.md     # confere a descrição do PR antes de abrir (deploy, seções do time)
 safemerge                              # numa pasta com front e back dentro: analisa os dois ao mesmo tempo
 safemerge --all-branches --test-cmd auto   # todas as branches de cada repositório, com o teste detectado em cada um
+safemerge --version                    # versão; safemerge <comando> --help mostra as opções
 ```
+
+O relatório termina com o **plano para mergear**: o que fazer, em ordem, com o comando pronto quando existe.
 
 Códigos de saída: `0` pode mergear · `1` o veredito atingiu `--fail-on` (padrão: `block`) · `2` erro de uso.
 
@@ -164,20 +175,26 @@ Códigos de saída: `0` pode mergear · `1` o veredito atingiu `--fail-on` (padr
 | Comando | O que faz |
 | --- | --- |
 | `safemerge` | analisa a branch atual |
-| `safemerge matrix` | todas as branches abertas × categoria |
+| `safemerge matrix` | todas as branches abertas × categoria, com a ordem de merge sugerida (`--jobs`, cache) |
+| `safemerge workspace [pasta]` | vários repositórios de uma vez (o mesmo que rodar `safemerge` na pasta raiz); `--all-branches` |
+| `safemerge contracts [pasta]` | rotas de API que uma branch do back cria/remove e o front usa |
 | `safemerge replay --limit 200` | refaz os merges antigos e conta conflitos (git × Mergiraf) |
 | `safemerge render --report r.json --format html` | formata um relatório salvo sem refazer a análise |
 | `safemerge verify-text --report r.json texto.md` | confere ids, commits, PRs, `arquivo:linha` e números escritos por uma IA |
 | `safemerge verify-resolution --target dev --file a.js=proposta.js --test-cmd "npm test"` | testa uma proposta de resolução numa cópia temporária; nunca aplica |
 | `safemerge install-hook` | instala o hook pre-push |
 
+Todas as opções, com exemplos: [`docs/COMANDOS.md`](docs/COMANDOS.md).
+
 </details>
 
 ### 2. Extensão do VS Code
 
-A extensão roda o safemerge (que já vem dentro dela) e mostra o resultado no editor: barra lateral,
-conflito sublinhado, CodeLens, hover com o código do destino, painel com o relatório, botões para copiar,
-salvar e mandar para a IA, e um som quando pode mergear.
+A extensão roda o safemerge (que já vem dentro dela) e mostra tudo no editor: painel com abas (Visão
+geral, Plano, Motivos, Conflitos, Branches, Semântico, Segurança, Testes, Cobertura), barra lateral em que
+cada item abre o detalhe, conflito sublinhado com CodeLens e hover, comparação dos dois lados, análise ao
+vivo, resolução assistida verificada, ordem de merge, front e back juntos, **Resolver com Claude** (ou com
+a IA que você usa) e um som para cada reação.
 
 **Instalação:**
 
@@ -188,13 +205,19 @@ salvar e mandar para a IA, e um som quando pode mergear.
    Também está no [Marketplace](https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge).
 2. Abra a pasta de um repositório git, clique no **escudo** na barra lateral e em **Analisar branch**.
 
-Sem acesso ao Marketplace? Baixe o `safemerge-0.3.0.vsix` na página de [Releases](https://github.com/joaocarpim/safe-merge/releases) e use **Extensões** → `⋯` → **Instalar do VSIX…**.
+Sem acesso ao Marketplace? Baixe o `safemerge-0.4.0.vsix` na página de [Releases](https://github.com/joaocarpim/safe-merge/releases) e use **Extensões** → `⋯` → **Instalar do VSIX…**.
 
-| Conflito no código, na aba Problemas e na barra de status | CodeLens e hover com o código do destino e como era antes |
+| **Visão geral:** veredito, fases, destinos, arquivos, PRs e branches | **Plano para mergear:** checklist com o botão de cada passo |
 | --- | --- |
-| ![Conflito no VS Code](docs/imagens/vscode-conflito.png) | ![Hover com o lado do destino](docs/imagens/vscode-hover.png) |
-| **O relatório completo no painel** | **Segurança: achados na barra lateral e notificação** |
-| ![Painel](docs/imagens/vscode-painel.png) | ![Segurança](docs/imagens/vscode-seguranca.png) |
+| ![Visão geral](docs/imagens/vscode-painel.png) | ![Plano](docs/imagens/vscode-plano.png) |
+| **Conflito:** sua branch, base comum e destino, com os botões | **Conflito semântico:** as três rodadas dos testes e a saída a partir do erro |
+| ![Conflitos](docs/imagens/vscode-conflitos.png) | ![Semântico](docs/imagens/vscode-semantico.png) |
+| **Segurança:** uma caixa por verificação e cartões com onde, evidência e por que importa | **No código:** sublinhado, hover com o lado do destino, aba Problemas e "Neste arquivo" |
+| ![Segurança](docs/imagens/vscode-seguranca.png) | ![Avisos no código](docs/imagens/vscode-hover.png) |
+| **Análise ao vivo:** fases e eventos enquanto roda | **Resolução assistida:** proposta testada numa cópia; "Aplicar" só se verificada |
+| ![Ao vivo](docs/imagens/vscode-ao-vivo.png) | ![Resolução](docs/imagens/vscode-resolucao.png) |
+| **Ordem de merge** de todas as branches abertas | **Motivos:** todos os motivos do veredito e os números |
+| ![Ordem de merge](docs/imagens/vscode-ordem-de-merge.png) | ![Motivos](docs/imagens/vscode-motivos.png) |
 
 <details>
 <summary>Comandos e configurações da extensão</summary>
@@ -203,17 +226,22 @@ Sem acesso ao Marketplace? Baixe o `safemerge-0.3.0.vsix` na página de [Release
 | --- | --- |
 | `safemerge: Analisar branch` | analisa a branch aberta |
 | `safemerge: Abrir relatório` | mostra o relatório completo |
-| `safemerge: Resolver com IA` | manda o pedido para o chat do VS Code e copia para colar em qualquer assistente |
+| `safemerge: Resolver com Claude (ou a IA que você usa)` | detecta os assistentes instalados (Claude Code, Copilot, Gemini, Codex, Continue, Cline) e manda o pedido para o escolhido; sempre copia também |
+| `safemerge: Analisar todos os repositórios da pasta` | front e back ao mesmo tempo |
+| `safemerge: Ordem de merge de todas as branches` | ordem sugerida e contrato de API entre os repositórios |
+| `safemerge: Verificar uma proposta de resolução` | testa um arquivo resolvido numa cópia temporária |
+| `safemerge: Escolher repositório` / `Escolher a IA` | trocar o repositório ou a IA |
 | `safemerge: Copiar relatório (texto)` / `Copiar para o PR (Markdown)` | para compartilhar |
 | `safemerge: Salvar relatório…` | txt, md, html, pedido para IA, sarif ou json |
 | `safemerge: Instalar hook pre-push` | barra o push de branch com "não mergear" |
-| `safemerge: Testar som` | ouve os sons de pode mergear, atenção e não mergear |
+| `safemerge: Testar som` | ouve os 9 sons (pode, atenção, não mergear, erro, início, repositórios achados…) |
 
 | Configuração | Padrão | Para quê |
 | --- | --- | --- |
 | `safemerge.testCommand` | vazio | testes rodados no resultado do merge (ex.: `npm test`) |
 | `safemerge.analyzeOnSave` | `false` | analisar ao salvar |
-| `safemerge.sound` | `ok` | som: só quando pode mergear (`ok`), sempre (`always`) ou nunca (`never`) |
+| `safemerge.sound` | `always` | som em toda reação (`always`), só quando pode mergear (`ok`) ou nunca (`never`) |
+| `safemerge.aiProvider` | `ask` | para qual IA o "Resolver com IA" manda (`ask` pergunta, mostrando as detectadas) |
 | `safemerge.soundStyle` | `safemerge` | som próprio ou do sistema |
 | `safemerge.cliPath` | vazio | usar outra instalação do safemerge |
 
@@ -323,10 +351,29 @@ Entradas: `test-command`, `build-command`, `fail-on` (`block`, `warn`, `never`),
 safemerge matrix
 ```
 
-Todas as branches abertas contra o destino, com o mesmo veredito da análise individual e a contagem por
-categoria.
+Todas as branches abertas contra o destino, com o mesmo veredito da análise individual, a contagem por
+categoria e a **ordem de merge sugerida**: stacks respeitadas (a base antes), primeiro quem já pode
+mergear, depois avisos, por último quem precisa de trabalho; em cada par que conflita, quem resolve; em
+migrações com o mesmo número, quem renumera. As branches rodam em paralelo (`--jobs`) e o resultado de
+cada uma fica em cache enquanto nada mudar.
 
-<p align="center"><img src="docs/imagens/terminal-matrix.png" width="820" alt="Matriz de branches abertas por categoria"></p>
+<p align="center"><img src="docs/imagens/terminal-matrix.png" width="820" alt="Matriz de branches abertas por categoria, com a ordem de merge"></p>
+
+### 7. Front e back juntos (vários repositórios)
+
+```bash
+cd meu-saas        # pasta com frontend/ e backend/ dentro
+safemerge          # analisa os dois ao mesmo tempo
+safemerge --all-branches --test-cmd auto
+safemerge contracts
+```
+
+Acha os repositórios até 3 níveis abaixo da pasta, analisa todos em paralelo e junta o resultado. Avisa
+quando a branch do back **remove uma rota** que o front ainda chama, ou quando o front chama uma rota que
+**só existe** na branch do back (o back entra antes). Na extensão: botão **Analisar todos** e a tela
+Repositórios.
+
+<p align="center"><img src="docs/imagens/terminal-pasta-raiz.png" width="820" alt="safemerge numa pasta com front e back: os dois analisados ao mesmo tempo"></p>
 
 ---
 
@@ -342,10 +389,13 @@ Resumo abaixo; a referência completa (como cada item é verificado e quando blo
 | **Testes no merge** | conflito semântico com a causa; teste instável repetido antes de acusar; build antes dos testes; Docker sem rede ou ambiente sem credenciais; strace no Linux |
 | **Segurança** | segredos em todos os commits; segredo ativo (TruffleHog, opcional); dependência com script de instalação, de fora do registro ou sem integrity; CVE nova (OSV-Scanner); workflow de CI perigoso; SAST no código novo e no resultado do merge |
 | **Deploy e domínio** | migração duplicada, fora de ordem ou mais antiga que uma aplicada; variável de ambiente nova; função removida no destino e ainda usada; dado pessoal em log (LGPD); rota sem autenticação; consulta sem filtro de tenant |
+| **Processo do PR** | migração sem passo de deploy na descrição; commits `fixup!`/WIP; descrição vazia; seções obrigatórias do time; PR grande |
+| **Entre repositórios** | rota de API removida pelo back e usada pelo front; rota nova do back de que o front depende |
 | **Revisão do código novo** | marcador de conflito commitado; SQL concatenado; `.env`/chave/credencial commitados; TLS/CSRF desligados; comparação de segredo com `==`; depuração esquecida; `.only`/`.skip`; N+1; HTTP sem timeout; exceção engolida; contador sem lock; idempotência sem reserva; transação com I/O; migração destrutiva; reformatação em massa |
 
 **Como o veredito é decidido:** um achado só **bloqueia** com arquivo, linha e evidência, e com gravidade
-e confiança acima do limite configurado. Heurísticas avisam, mas não bloqueiam sozinhas.
+e confiança acima do limite configurado. Heurísticas avisam, mas não bloqueiam sozinhas; as de baixa
+confiança ficam como observação e não mudam o veredito.
 
 ## Todas as situações
 
@@ -419,8 +469,8 @@ Os valores padrão e a descrição de cada chave estão em [`src/config.ts`](src
 
 - **Somente leitura.** Nada no seu repositório muda: merges, testes e propostas rodam em cópias
   temporárias (`git worktree`).
-- **Determinístico e testado.** O núcleo é TypeScript sem IA, sem dependências em produção, com 169
-  testes e um cenário de aceitação com gabarito.
+- **Determinístico e testado.** O núcleo é TypeScript sem IA, sem dependências em produção, com 214
+  testes, um cenário de aceitação com gabarito e uma verificação de todos os comandos (`npm run smoke`).
 - **Evidência antes de bloquear.** Sem arquivo, linha e trecho, é aviso.
 - **Cobertura explícita.** O relatório diz o que rodou, o que rodou parcialmente e o que ficou sem cobertura.
 - **Sem nota de 0 a 100.** Não existe padrão para isso, e uma nota esconde o que não foi verificado.
@@ -470,13 +520,17 @@ Sim. É desenvolvido e testado no Windows, e o CI roda também em Linux e macOS.
 - As integrações com gitleaks, zizmor, semgrep, OSV-Scanner, TruffleHog, Mergiraf e Docker foram testadas
   com as saídas no formato real de cada ferramenta.
 - PRs de fork só entram na comparação se a branch existir no seu remoto.
+- O contrato de API entre front e back é heurística por texto (rotas de Express, Fastify, Koa, Nest,
+  FastAPI, Flask e Django; chamadas com fetch, axios e parecidos): avisa, não bloqueia.
+- A ordem de merge é por repositório; entre repositórios, só as dependências de rota de API.
 
 ## Desenvolvimento
 
 ```bash
 npm install
-npm test                      # 169 testes
+npm test                      # 214 testes
 npm run typecheck
+npm run smoke                 # roda todos os comandos e opções da CLI nos demos (47 verificações)
 npm run test:complex          # cenário de produção com gabarito (acertividade e tempo)
 node scripts/screenshots.mjs  # regenera as imagens deste README (Edge ou Chrome)
 ```

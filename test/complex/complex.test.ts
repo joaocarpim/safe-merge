@@ -24,9 +24,13 @@ let tmp = '';
 let repo = '';
 const results: Array<{ branch: string; ok: boolean; hit: number; total: number; fp: string[]; ms: number; level: string }> = [];
 
-/** Tudo que um item do gabarito pode casar: motivos do veredito e regras dos achados. */
-function haystack(r: AnalysisReport): string[] {
-  return [...r.verdict.reasons.map((x) => `${x.level}: ${x.text}`), ...r.findings.filter((f) => f.level !== 'info').map((f) => `${f.level}: ${f.category}/${f.rule}`)];
+/**
+ * Tudo que um item do gabarito pode casar: motivos do veredito e regras dos achados. `withInfo`: inclui as
+ * observações (heurística de baixa confiança): contam como detectadas (estão no relatório), mas não como
+ * falso positivo (não mudam o veredito).
+ */
+function haystack(r: AnalysisReport, withInfo = false): string[] {
+  return [...r.verdict.reasons.map((x) => `${x.level}: ${x.text}`), ...r.findings.filter((f) => withInfo || f.level !== 'info').map((f) => `${f.level}: ${f.category}/${f.rule}`)];
 }
 
 describe('cenário de produção complexo', () => {
@@ -64,7 +68,8 @@ describe('cenário de produção complexo', () => {
       });
       const ms = performance.now() - t0;
       const hay = haystack(r);
-      const missing = exp.deve.filter((d) => !hay.some((h) => h.includes(d)));
+      const all = haystack(r, true);
+      const missing = exp.deve.filter((d) => !all.some((h) => h.includes(d)));
       const fp = (exp.nao ?? []).filter((n) => (n === 'block' ? r.verdict.level === 'block' : hay.some((h) => h.includes(n))));
       results.push({ branch, ok: r.verdict.level === exp.nivel, hit: exp.deve.length - missing.length, total: exp.deve.length, fp, ms, level: r.verdict.level });
       assert.deepEqual(missing, [], `não detectou:\n${missing.join('\n')}\n\nmotivos e regras:\n${hay.join('\n')}`);

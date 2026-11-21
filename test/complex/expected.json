@@ -1,29 +1,151 @@
 {
   "_sobre": "Gabarito do examples/make-demo-complex.sh. Cada item de 'deve' é uma situação plantada (regra de achado ou trecho do motivo). 'nivel' é o veredito esperado. Rodado sem ferramentas externas (só regras internas).",
   "branches": {
-    "feat/desconto-orcamento": { "nivel": "block", "deve": ["arquivo em conflito com dev", "atrás de dev", "também altera calcularTotal"] },
-    "feat/desconto-progressivo": { "nivel": "block", "deve": ["arquivo em conflito com dev", "também altera calcularTotal"] },
-    "feat/recibo-pix": { "nivel": "block", "deve": ["os testes quebram no resultado combinado", "semantic/removed-symbol-used"] },
-    "fix/log-formato": { "nivel": "warn", "deve": ["dev renomeou src/server/lib/log.js → src/server/lib/logger.js"] },
-    "feat/relatorio-pdf": { "nivel": "block", "deve": ["arquivo em conflito com dev"] },
-    "chore/deps": { "nivel": "warn", "deve": ["conflito só em lockfile"] },
-    "feat/antiga": { "nivel": "warn", "deve": ["atrás de dev"] },
-    "feat/agenda": { "nivel": "warn", "deve": ["vai conflitar com esta: feat/integracao-mercadopago"], "nao": ["block", "tenant/", "auth/", "lgpd/", "env/undocumented"] },
-    "feat/agenda-notificacoes": { "nivel": "warn", "deve": ["PR empilhado"], "nao": ["block"] },
+    "feat/desconto-orcamento": {
+      "nivel": "block",
+      "deve": [
+        "arquivo em conflito com dev",
+        "atrás de dev",
+        "também altera calcularTotal"
+      ]
+    },
+    "feat/desconto-progressivo": {
+      "nivel": "block",
+      "deve": [
+        "arquivo em conflito com dev",
+        "também altera calcularTotal"
+      ]
+    },
+    "feat/recibo-pix": {
+      "nivel": "block",
+      "deve": [
+        "os testes quebram no resultado combinado",
+        "semantic/removed-symbol-used"
+      ]
+    },
+    "fix/log-formato": {
+      "nivel": "warn",
+      "deve": [
+        "dev renomeou src/server/lib/log.js → src/server/lib/logger.js"
+      ]
+    },
+    "feat/relatorio-pdf": {
+      "nivel": "block",
+      "deve": [
+        "arquivo em conflito com dev"
+      ]
+    },
+    "chore/deps": {
+      "nivel": "warn",
+      "deve": [
+        "conflito só em lockfile"
+      ]
+    },
+    "feat/antiga": {
+      "nivel": "warn",
+      "deve": [
+        "atrás de dev"
+      ]
+    },
+    "feat/agenda": {
+      "nivel": "warn",
+      "deve": [
+        "vai conflitar com esta: feat/integracao-mercadopago"
+      ],
+      "nao": [
+        "block",
+        "tenant/",
+        "auth/",
+        "lgpd/",
+        "env/undocumented"
+      ]
+    },
+    "feat/agenda-notificacoes": {
+      "nivel": "warn",
+      "deve": [
+        "branch empilhada"
+      ],
+      "nao": [
+        "block"
+      ]
+    },
     "feat/cobranca-pix": {
       "nivel": "block",
-      "deve": ["supply-chain/install-script", "supply-chain/untrusted-source", "tenant/query-without-tenant", "migration/older-than-existing", "lgpd/pii-in-log", "env/undocumented-variable", "auth/route-without-auth"]
+      "deve": [
+        "supply-chain/install-script",
+        "supply-chain/untrusted-source",
+        "tenant/query-without-tenant",
+        "migration/older-than-existing",
+        "lgpd/pii-in-log",
+        "env/undocumented-variable",
+        "auth/route-without-auth"
+      ]
     },
-    "feat/ci-preview": { "nivel": "block", "deve": ["ci/builtin/pr-target-checkout", "ci/builtin/template-injection"] },
-    "feat/migracao-garantia": { "nivel": "warn", "deve": ["migration/duplicate-number"], "nao": ["block"] },
-    "feat/migracao-fotos": { "nivel": "warn", "deve": ["migration/duplicate-number"], "nao": ["block"] },
-    "feat/teste-instavel": { "nivel": "warn", "deve": ["teste instável"], "nao": ["block"] },
-    "feat/integracao-mercadopago": { "nivel": "block", "deve": ["secret/builtin/mercadopago-token", "vão conflitar com esta"] },
-    "feat/ja-mergeada": { "nivel": "ok", "deve": ["não há nada a mergear"] },
-    "feat/galeria-fotos": { "nivel": "ok", "deve": [], "nao": ["block", "warn:"] },
+    "feat/ci-preview": {
+      "nivel": "block",
+      "deve": [
+        "ci/builtin/pr-target-checkout",
+        "ci/builtin/template-injection"
+      ]
+    },
+    "feat/migracao-garantia": {
+      "nivel": "warn",
+      "deve": [
+        "migration/duplicate-number"
+      ],
+      "nao": [
+        "block"
+      ]
+    },
+    "feat/migracao-fotos": {
+      "nivel": "warn",
+      "deve": [
+        "migration/duplicate-number"
+      ],
+      "nao": [
+        "block"
+      ]
+    },
+    "feat/teste-instavel": {
+      "nivel": "warn",
+      "deve": [
+        "teste instável"
+      ],
+      "nao": [
+        "block"
+      ]
+    },
+    "feat/integracao-mercadopago": {
+      "nivel": "block",
+      "deve": [
+        "secret/builtin/mercadopago-token",
+        "vão conflitar com esta"
+      ]
+    },
+    "feat/ja-mergeada": {
+      "nivel": "ok",
+      "deve": [
+        "não há nada a mergear"
+      ]
+    },
+    "feat/galeria-fotos": {
+      "nivel": "ok",
+      "deve": [],
+      "nao": [
+        "block",
+        "warn:"
+      ]
+    },
     "feat/relatorio-financeiro": {
       "nivel": "block",
-      "deve": ["secret/forbidden-file", "hygiene/sql-concat", "hygiene/debug-leftover", "risk/query-in-loop", "risk/http-without-timeout", "risk/swallowed-exception"]
+      "deve": [
+        "secret/forbidden-file",
+        "hygiene/sql-concat",
+        "hygiene/debug-leftover",
+        "risk/query-in-loop",
+        "risk/http-without-timeout",
+        "risk/swallowed-exception"
+      ]
     }
   }
 }

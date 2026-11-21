@@ -150,7 +150,10 @@ Rodando `safemerge` numa pasta que não é repositório mas tem repositórios de
 todos e analisa ao mesmo tempo, um processo por repositório (`--jobs`, padrão 4), e junta o resultado. O
 veredito geral é o mais grave. `--all-branches` roda a matriz (todas as branches abertas) em cada um;
 `--test-cmd auto` usa o comando de testes detectado em cada repositório. Também como `safemerge workspace`.
-Não cruza um repositório com o outro (contrato de API entre front e back não é verificado).
+Cruza os repositórios pelo **contrato de API** (`safemerge contracts`): avisa quando a branch do back remove
+uma rota que o front ainda chama, ou quando o front chama uma rota que só existe na branch do back (o back
+entra antes). Heurística por texto (Express, Fastify, Koa, Nest, FastAPI, Flask, Django; fetch, axios): avisa,
+não bloqueia.
 
 ## 6d. Plano para mergear e ordem de merge
 
@@ -163,7 +166,9 @@ sugestões e analisar de novo. Observações não viram passo.
 **Ordem de merge** (no `safemerge matrix`): todas as branches abertas em sequência. Stacks respeitadas (a
 base antes); entre as livres, primeiro quem já pode mergear, depois quem pede atenção, por último quem
 precisa de trabalho. Em cada par que conflita, diz quem resolve o conflito (quem entra depois).
-Sem estimativa de tempo nem nota de prioridade.
+Em migrações com o mesmo número, diz quem renumera (quem entra depois). As branches rodam em paralelo
+(`--jobs`) e o resultado de cada uma fica em cache (pasta temporária do sistema) enquanto a branch, o
+destino, as outras branches, a configuração e a versão não mudarem. Sem estimativa de tempo nem nota de prioridade.
 
 ## 7. IA com verificação (plugin do Claude Code)
 

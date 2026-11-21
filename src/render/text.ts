@@ -171,6 +171,17 @@ export function renderText(report: AnalysisReport, opts: TextOptions): string {
     line();
   }
 
+  const plan = report.plan ?? [];
+  if (plan.length > 0 && report.verdict.level !== 'ok') {
+    line(c.bold('PLANO PARA MERGEAR'));
+    for (const s of plan) {
+      const mark = s.level === 'block' ? c.red('✗') : s.level === 'warn' ? c.yellow('!') : c.dim('·');
+      line(`  ${String(s.n).padStart(2)}. ${mark} ${s.title}${s.file ? c.dim(` (${s.file}${s.line ? `:${s.line}` : ''})`) : ''}`);
+      if (s.command) line(`      ${c.cyan(s.command)}`);
+    }
+    line();
+  }
+
   for (const w of report.warnings) line(c.dim(`aviso: ${w}`));
   line(c.dim(`${seconds(report.durationMs)} · somente leitura: nenhuma branch foi alterada`));
   return `${out.join('\n')}\n`;

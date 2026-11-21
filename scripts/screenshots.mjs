@@ -179,8 +179,16 @@ spawnSync('git', ['commit', '-q', '-m', 'nota'], { cwd: repo });
 const push = spawnSync('git', ['push', 'origin', 'feat/desconto-orcamento'], { cwd: repo, encoding: 'utf8', env: { ...process.env, FORCE_COLOR: '1' } });
 shoot(terminal('git push (hook pre-push do safemerge)', 'git push origin feat/desconto-orcamento', `${push.stdout}${push.stderr}`), 'terminal-hook-pre-push.png', 1240);
 
-// erro: fora de um repositório
-term('terminal-erro.png', 'safemerge fora de um repositório', 'safemerge', [], tmp);
+// pasta raiz com dois repositórios (back = o demo complexo, front = o demo simples): analisa os dois juntos
+spawnSync('git', ['checkout', '-q', '-f', 'feat/cobranca-pix'], { cwd: repo });
+const madeFront = spawnSync('bash', [join(ROOT, 'examples', 'make-demo.sh'), join(tmp, 'frontend')], { encoding: 'utf8' });
+if (madeFront.status !== 0) throw new Error(madeFront.stderr);
+term('terminal-pasta-raiz.png', 'safemerge (pasta com front e back)', 'cd meu-saas && safemerge', ['--no-fetch'], tmp);
+
+// erro: fora de um repositório (pasta vazia: com repositórios dentro, ele analisaria todos)
+const vazia = join(tmp, 'vazia');
+mkdirSync(vazia);
+term('terminal-erro.png', 'safemerge fora de um repositório', 'safemerge', [], vazia);
 
 writeFileSync(join(OUT, 'situacoes.json'), `${JSON.stringify(index, null, 2)}\n`);
 rmSync(tmp, { recursive: true, force: true });

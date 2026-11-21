@@ -512,7 +512,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisReport {
       const others = [...branchMap.all.values()].filter((b) => b.name !== head.name && b.name !== primary.name);
       const mergedCommit = primaryMerge.status === 'clean' ? mergeCommit(cwd, head.ref, primary.ref) : null;
       const description = opts.body ?? ownPr?.body ?? null;
-      const ctx: CheckContext = { cwd, headRef: head.ref, headSha, target: primary, mergeBase: mb, mergedCommit, others, cfg, tools, description, pr: ownPr ? { number: ownPr.number, title: ownPr.title } : null };
+      const ctx: CheckContext = { cwd, headRef: head.ref, headSha, target: primary, mergeBase: mb, mergedCommit, others, cfg, tools, description, pr: ownPr && !opts.body ? { number: ownPr.number, title: ownPr.title } : null };
       let total = 0;
       for (const check of opts.checks ?? SECURITY_CHECKS) {
         const t0 = Date.now();

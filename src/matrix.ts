@@ -1,4 +1,11 @@
-import { analyze, type Level } from './analyze.js';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { analyze, type AnalysisReport, type Level } from './analyze.js';
+import type { BranchRef } from './branches.js';
+import { VERSION } from './version.js';
+import { runChild, selfCommand } from './workspace.js';
 import { detectBranches, fetchRemote, listBranches, pickRemote } from './branches.js';
 import type { Config } from './config.js';
 import { git, isAncestor, repoRoot } from './git.js';
@@ -50,6 +57,8 @@ export interface MatrixRow {
   after: string[];
   /** Branches desta matriz com que esta vai conflitar. */
   conflictsWith: string[];
+  /** Branches com migração de mesmo número. */
+  migrationWith: string[];
   error?: string;
 }
 
@@ -60,6 +69,8 @@ export interface MatrixResult {
   skipped: { branch: string; reason: string }[];
   /** Ordem de merge sugerida (stacks primeiro; entre as livres, quem já pode, depois avisos, depois bloqueadas). */
   order: OrderStep[];
+  /** Quantas branches vieram do cache (sem analisar de novo). */
+  cached?: number;
 }
 
 export interface MatrixOptions {
@@ -74,8 +85,16 @@ export interface MatrixOptions {
   now?: () => number;
 }
 
-/** Roda a análise de cada branch aberta contra o destino e resume por categoria. Só leitura. */
-export function matrix(opts: MatrixOptions): MatrixResult {
+
+interface Plan {
+  cwd: string;
+  base: BranchRef;
+  branches: BranchRef[];
+  skipped: MatrixResult['skipped'];
+}
+
+/** Quais branches entram na matriz (e quais ficam de fora, com o motivo). */
+function planMatrix(opts: MatrixOptions): Plan {
   const cwd = repoRoot(opts.cwd);
   const remote = pickRemote(cwd);
   if (remote && opts.fetch !== false) fetchRemote(cwd, remote);
@@ -102,15 +121,70 @@ export function matrix(opts: MatrixOptions): MatrixResult {
     })
     .sort((a, b) => a.name.localeCompare(b.name));
   for (const b of candidates.slice(opts.limit)) skipped.push({ branch: b.name, reason: `fora do limite de ${opts.limit} branches (--limit)` });
+  return { cwd, base, branches: candidates.slice(0, opts.limit), skipped };
+}
 
-  const rows: MatrixRow[] = candidates.slice(0, opts.limit).map((b) => {
+/** Linha da matriz a partir do relatório da branch. */
+export function rowFromReport(branch: string, r: AnalysisReport): MatrixRow {
+  const cells: Record<string, MatrixCell> = Object.fromEntries(MATRIX_CATEGORIES.map((c) => [c, { block: 0, warn: 0 }]));
+  for (const f of r.findings) {
+    const cell = cells[f.category];
+    if (!cell || f.level === 'info') continue;
+    cell[f.level]++;
+  }
+  // motivos que não são achados nem conflito (atrasada, mesma função, stack de PR): coluna "branch"
+  for (const x of r.verdict.reasons) if (x.level !== 'info' && !x.text.startsWith('[SM-') && !/conflit|testes/.test(x.text)) cells.branch![x.level]++;
+  const t = r.targets[0];
+  if (r.semantic[0]?.status === 'failed' && r.semantic[0].cause === 'semantic-conflict') cells.semantic!.block++;
+  // migração com o mesmo número em outra branch (a evidência termina com "em <branch>")
+  const migrationWith = r.findings
+    .filter((f) => f.category === 'migration' && f.rule === 'duplicate-number')
+    .map((f) => / em (\S+)$/.exec(f.evidence ?? '')?.[1])
+    .filter((b): b is string => Boolean(b) && b !== r.primary);
+  return {
+    branch,
+    level: r.verdict.level,
+    conflicts: t?.conflicts.length ?? 0,
+    conflictsLockfileOnly: (t?.conflicts.length ?? 0) > 0 && t!.conflicts.every((c) => c.hint === 'regenerate-lockfile'),
+    otherConflicts: r.summary.otherBranchConflicts,
+    behind: t?.behind ?? 0,
+    tests: r.semantic[0] && r.semantic[0].status !== 'skipped' ? r.semantic[0].status : null,
+    cells,
+    uncovered: r.coverage.filter((c) => c.status === 'missing-tool' || c.status === 'error').length,
+    after: r.overlaps.filter((o) => o.relation === 'ours-contains-theirs').map((o) => o.branch),
+    conflictsWith: r.overlaps.filter((o) => o.wouldConflict).map((o) => o.branch),
+    migrationWith: [...new Set(migrationWith)],
+  };
+}
+
+function errorRow(branch: string, message: string): MatrixRow {
+  return { branch, level: 'error', conflicts: 0, conflictsLockfileOnly: false, otherConflicts: 0, behind: 0, tests: null, cells: {}, uncovered: 0, after: [], conflictsWith: [], migrationWith: [], error: message.split('\n')[0] };
+}
+
+function finish(plan: Plan, rows: MatrixRow[], extra: Partial<MatrixResult> = {}): MatrixResult {
+  const rank = { block: 0, error: 1, warn: 2, ok: 3 } as const;
+  rows.sort((a, b) => rank[a.level] - rank[b.level] || a.branch.localeCompare(b.branch));
+  return {
+    schema: 1,
+    base: plan.base.name,
+    rows,
+    skipped: plan.skipped,
+    order: mergeOrder(rows.map((r) => ({ branch: r.branch, level: r.level, after: r.after, conflictsWith: r.conflictsWith, migrationWith: r.migrationWith }))),
+    ...extra,
+  };
+}
+
+/** Roda a análise de cada branch aberta contra o destino e resume por categoria. Só leitura. */
+export function matrix(opts: MatrixOptions): MatrixResult {
+  const plan = planMatrix(opts);
+  const rows = plan.branches.map((b) => {
     try {
       const r = analyze({
-        cwd,
+        cwd: plan.cwd,
         cfg: opts.cfg,
         head: b.name,
-        base: base.name,
-        targets: [base.name],
+        base: plan.base.name,
+        targets: [plan.base.name],
         fetch: false,
         usePrs: false,
         // mesmo veredito da análise individual: compara com as outras branches e roda os testes configurados
@@ -119,37 +193,81 @@ export function matrix(opts: MatrixOptions): MatrixResult {
         tools: opts.tools,
         now: opts.now,
       });
-      const cells: Record<string, MatrixCell> = Object.fromEntries(MATRIX_CATEGORIES.map((c) => [c, { block: 0, warn: 0 }]));
-      for (const f of r.findings) {
-        const cell = cells[f.category];
-        if (!cell || f.level === 'info') continue;
-        cell[f.level]++;
-      }
-      // motivos que não são achados nem conflito (atrasada, mesma função, stack de PR): coluna "branch"
-      for (const x of r.verdict.reasons) if (x.level !== 'info' && !x.text.startsWith('[SM-') && !/conflit|testes/.test(x.text)) cells.branch![x.level]++;
-      const t = r.targets[0];
-      if (r.semantic[0]?.status === 'failed' && r.semantic[0].cause === 'semantic-conflict') cells.semantic!.block++;
-      return {
-        branch: b.name,
-        level: r.verdict.level,
-        conflicts: t?.conflicts.length ?? 0,
-        conflictsLockfileOnly: (t?.conflicts.length ?? 0) > 0 && t!.conflicts.every((c) => c.hint === 'regenerate-lockfile'),
-        otherConflicts: r.summary.otherBranchConflicts,
-        behind: t?.behind ?? 0,
-        tests: r.semantic[0] && r.semantic[0].status !== 'skipped' ? r.semantic[0].status : null,
-        cells,
-        uncovered: r.coverage.filter((c) => c.status === 'missing-tool' || c.status === 'error').length,
-        after: r.overlaps.filter((o) => o.relation === 'ours-contains-theirs').map((o) => o.branch),
-        conflictsWith: r.overlaps.filter((o) => o.wouldConflict).map((o) => o.branch),
-      };
+      return rowFromReport(b.name, r);
     } catch (err) {
-      return { branch: b.name, level: 'error', conflicts: 0, conflictsLockfileOnly: false, otherConflicts: 0, behind: 0, tests: null, cells: {}, uncovered: 0, after: [], conflictsWith: [], error: (err as Error).message.split('\n')[0] };
+      return errorRow(b.name, (err as Error).message);
     }
   });
-  const rank = { block: 0, error: 1, warn: 2, ok: 3 } as const;
-  rows.sort((a, b) => rank[a.level] - rank[b.level] || a.branch.localeCompare(b.branch));
-  return { schema: 1, base: base.name, rows, skipped, order: mergeOrder(rows.map((r) => ({ branch: r.branch, level: r.level, after: r.after, conflictsWith: r.conflictsWith }))) };
+  return finish(plan, rows);
 }
+
+export interface ParallelOptions extends MatrixOptions {
+  /** Branches analisadas ao mesmo tempo (um processo da CLI por branch). */
+  jobs: number;
+  /** Pasta do cache (null = sem cache). */
+  cacheDir: string | null;
+  /** Opções repassadas a cada análise (ex.: --config). */
+  forward?: string[];
+  cli?: { command: string; args: string[] };
+}
+
+/**
+ * Chave do cache de uma branch: muda se a branch, o destino, qualquer outra branch da matriz (as
+ * sobreposições dependem delas), a configuração, o comando de testes ou a versão mudarem.
+ */
+export function cacheKey(parts: { head: string; base: string; others: string[]; config: string; testCommand: string | null | undefined; security: boolean | undefined; version: string }): string {
+  return createHash('sha1').update(JSON.stringify({ ...parts, others: [...parts.others].sort() })).digest('hex');
+}
+
+/** Mesma matriz, com as branches analisadas em paralelo e o resultado guardado por versão das branches. */
+export async function matrixParallel(opts: ParallelOptions): Promise<MatrixResult> {
+  const plan = planMatrix(opts);
+  const sha = (ref: string) => git(plan.cwd, ['rev-parse', ref]).stdout.trim();
+  const baseSha = sha(plan.base.ref);
+  const allShas = plan.branches.map((b) => `${b.name}@${sha(b.ref)}`);
+  const config = createHash('sha1').update(JSON.stringify(opts.cfg)).digest('hex');
+  const cmd = opts.cli ?? selfCommand();
+  const rows: MatrixRow[] = new Array(plan.branches.length);
+  let cached = 0;
+  let next = 0;
+  const worker = async () => {
+    while (next < plan.branches.length) {
+      const i = next++;
+      const b = plan.branches[i]!;
+      const key = cacheKey({ head: allShas[i]!, base: baseSha, others: allShas, config, testCommand: opts.testCommand, security: opts.security, version: VERSION });
+      const file = opts.cacheDir ? join(opts.cacheDir, `${key}.json`) : null;
+      if (file && existsSync(file)) {
+        try {
+          rows[i] = JSON.parse(readFileSync(file, 'utf8')) as MatrixRow;
+          cached++;
+          continue;
+        } catch {
+          /* cache corrompido: analisa de novo */
+        }
+      }
+      const args = ['analyze', '--head', b.name, '--base', plan.base.name, '--target', plan.base.name, '--no-fetch', '--no-prs', '--format', 'json', '--fail-on', 'never', ...(opts.testCommand ? ['--test-cmd', opts.testCommand] : []), ...(opts.security === false ? ['--no-security'] : []), ...(opts.forward ?? [])];
+      const res = await runChild(cmd, plan.cwd, args);
+      try {
+        if (res.code !== 0) throw new Error(res.stderr.trim().split('\n').pop() || `saiu com código ${res.code}`);
+        rows[i] = rowFromReport(b.name, JSON.parse(res.stdout) as AnalysisReport);
+        if (file) {
+          mkdirSync(opts.cacheDir!, { recursive: true });
+          writeFileSync(file, JSON.stringify(rows[i]));
+        }
+      } catch (err) {
+        rows[i] = errorRow(b.name, (err as Error).message.replace(/^erro:\s*/, ''));
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(opts.jobs, plan.branches.length)) }, worker));
+  return finish(plan, rows, { cached });
+}
+
+/** Pasta de cache da matriz deste repositório (fora do repositório: nada é escrito nele). */
+export function matrixCacheDir(cwd: string): string {
+  return join(tmpdir(), 'safemerge-cache', createHash('sha1').update(repoRoot(cwd)).digest('hex').slice(0, 16));
+}
+
 
 /** Só as categorias com algo em alguma branch (a tabela cabe no terminal). */
 function usedCategories(m: MatrixResult): Array<(typeof MATRIX_CATEGORIES)[number]> {

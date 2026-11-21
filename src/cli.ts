@@ -25,6 +25,7 @@ Uso:
   safemerge matrix [--base dev]      todas as branches abertas × categoria (conflito, segurança, deploy)
   safemerge workspace [pasta]        vários repositórios de uma vez (front e back…); --all-branches = todas
                                      (rodar safemerge numa pasta com repositórios dentro faz o mesmo)
+  safemerge contracts [pasta]        rotas de API que uma branch do back muda e o front usa (heurística)
 
 Opções de analyze:
   --head <branch>      Branch a analisar (padrão: a branch atual)
@@ -50,6 +51,25 @@ Opções de analyze:
   --config <arquivo>   Configuração (padrão: .safemerge/config.json)
   --no-color           Sem cores
   -h, --help           Esta ajuda
+
+Opções de matrix:
+  --base <branch>  --limit <n> (padrão 30)  --test-cmd <cmd|auto>  --no-security  --no-fetch
+  --jobs <n>           Branches analisadas ao mesmo tempo (padrão: até 4)
+  --no-cache           Analisa tudo de novo (o cache guarda só branches que não mudaram)
+  --format text|markdown|json  --out <arquivo>  --config <arquivo>
+
+Opções de workspace (ou safemerge numa pasta com vários repositórios):
+  --all-branches  --jobs <n>  --depth <n>  --format text|markdown|json  --out  --fail-on
+  e qualquer opção de analyze (ex.: --no-fetch, --test-cmd auto)
+
+Outros:
+  safemerge contracts [pasta] [--all-branches] [--format json]
+  safemerge replay [--limit 200] [--rev <ref>] [--no-mergiraf] [--format json] [--out]
+  safemerge render --report <report.json> --format html|markdown|text|sarif|github|prompt [--out]
+  safemerge verify-text --report <report.json> <arquivo> [--format json]
+  safemerge verify-resolution --target <branch> --file <caminho>=<proposta> [--test-cmd] [--format json]
+  safemerge install-hook [--force] [--timeout <s>]
+  safemerge --version · safemerge help · safemerge <comando> --help
 
 Somente leitura: nenhuma branch ou arquivo seu é alterado. Acesso à rede: "git fetch"
 (--no-fetch), listagem de PRs pelo gh (--no-prs) e as regras do semgrep, se instalado.
@@ -338,6 +358,8 @@ async function runMatrix(argv: string[]): Promise<number> {
       format: { type: 'string', default: 'text' },
       out: { type: 'string' },
       config: { type: 'string' },
+      jobs: { type: 'string' },
+      'no-cache': { type: 'boolean' },
     },
   });
   const limit = Number.parseInt(values.limit as string, 10);
@@ -346,10 +368,26 @@ async function runMatrix(argv: string[]): Promise<number> {
   const cwd = process.cwd();
   { const problem = repoProblem(cwd); if (problem) throw new UsageError(problem); }
   const root = repoRoot(cwd);
-  const { matrix, renderMatrixText, renderMatrixMarkdown } = await import('./matrix.js');
+  const { matrixParallel, matrixCacheDir, renderMatrixText, renderMatrixMarkdown } = await import('./matrix.js');
+  const { cpus } = await import('node:os');
+  const jobs = values.jobs ? Number.parseInt(values.jobs, 10) : Math.max(1, Math.min(4, cpus().length - 1));
+  if (!(jobs >= 1)) throw new UsageError(`--jobs inválido: ${values.jobs}`);
   let result;
   try {
-    result = matrix({ cwd: root, cfg: loadConfig(root, values.config), base: values.base, limit, fetch: !values['no-fetch'], testCommand: resolveTestCmd(values['test-cmd'], root) ?? null, security: !values['no-security'] });
+    result = await matrixParallel({
+      cwd: root,
+      cfg: loadConfig(root, values.config),
+      base: values.base,
+      limit,
+      fetch: !values['no-fetch'],
+      testCommand: resolveTestCmd(values['test-cmd'], root) ?? null,
+      security: !values['no-security'],
+      jobs,
+      cacheDir: values['no-cache'] ? null : matrixCacheDir(root),
+      forward: values.config ? ['--config', values.config] : [],
+    });
+    if (result.cached) process.stderr.write(`safemerge: ${result.cached} de ${result.rows.length} branch(es) sem mudança desde a última vez (cache)
+`);
   } catch (err) {
     throw new UsageError((err as Error).message);
   }
@@ -420,6 +458,21 @@ async function runWorkspace(argv: string[], rootArg?: string): Promise<number> {
   return failOn !== 'never' && levelRank(level) >= levelRank(failOn as Level) ? 1 : 0;
 }
 
+/** Contrato de API entre os repositórios de uma pasta (front × back). */
+async function runContracts(argv: string[]): Promise<number> {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { 'all-branches': { type: 'boolean' }, format: { type: 'string', default: 'text' }, depth: { type: 'string', default: '3' } } });
+  const root = resolve(positionals[0] ?? process.cwd());
+  const { workspaceContracts, renderContractsText, findRepos } = await import('./workspace.js');
+  const repos = findRepos(root, Number(values.depth));
+  if (repos.length < 2) throw new UsageError(`precisa de pelo menos 2 repositórios em ${root} (achei ${repos.length})`);
+  const issues = workspaceContracts(root, { allBranches: Boolean(values['all-branches']), depth: Number(values.depth) });
+  if (values.format === 'json') process.stdout.write(`${JSON.stringify({ schema: 1, root, repos: repos.map((r) => r.relative), issues }, null, 2)}
+`);
+  else process.stdout.write(`${renderContractsText(issues) || `nenhuma rota de API mudada por uma branch e usada por outro repositório (${repos.map((r) => r.relative).join(', ')}; heurística por texto)`}
+`);
+  return 0;
+}
+
 type Command = (argv: string[]) => Promise<number>;
 
 const COMMANDS: Record<string, () => Promise<Command>> = {
@@ -431,6 +484,7 @@ const COMMANDS: Record<string, () => Promise<Command>> = {
   render: async () => runRender,
   matrix: async () => runMatrix,
   workspace: async () => runWorkspace,
+  contracts: async () => runContracts,
 };
 
 /** Opção que o Electron/VS Code exige para rodar um script como Node. Não é nossa: é ignorada. */
@@ -438,6 +492,20 @@ const ELECTRON_FLAG = '--ms-enable-electron-run-as-node';
 
 async function main(rawArgv: string[]): Promise<number> {
   const argv = rawArgv.filter((a) => a !== ELECTRON_FLAG);
+  if (argv[0] === '--version' || argv[0] === '-v' || argv[0] === 'version') {
+    process.stdout.write(`${VERSION}
+`);
+    return 0;
+  }
+  if (argv[0] === 'help') {
+    process.stdout.write(argv[1] === 'workspace' ? WORKSPACE_HELP : HELP);
+    return 0;
+  }
+  // "safemerge <comando> --help": a ajuda geral traz as opções de cada comando
+  if (argv.length > 1 && (argv.includes('--help') || argv.includes('-h')) && argv[0] !== 'workspace') {
+    process.stdout.write(HELP);
+    return 0;
+  }
   const first = argv[0];
   const isCommand = first !== undefined && !first.startsWith('-');
   const name = isCommand ? first : 'analyze';
