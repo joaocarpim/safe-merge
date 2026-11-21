@@ -344,3 +344,22 @@ describe('CLI', () => {
     assert.equal(cli(repo.dir, '--opcao-que-nao-existe').status, 2);
   });
 });
+
+describe('mensagem quando a pasta não pode ser analisada', () => {
+  it('diz qual pasta, que não há .git e o que fazer', async () => {
+    const { repoProblem } = await import('../src/git.ts');
+    const outside = mkdtempSync(join(tmpdir(), 'prg-sem-git-'));
+    try {
+      const msg = repoProblem(outside)!;
+      assert.ok(msg.includes('não é um repositório git') && msg.includes('Abrir Pasta') && msg.includes('git init'), msg);
+      assert.ok(msg.includes(outside), 'mostra a pasta analisada');
+      const res = spawnSync('node', ['--import', import.meta.resolve('tsx'), join(import.meta.dirname, '../src/cli.ts'), '--no-fetch'], { cwd: outside, encoding: 'utf8' });
+      assert.equal(res.status, 2);
+      assert.match(res.stderr, /^erro: a pasta .* não é um repositório git/m);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+    repo = baseRepo();
+    assert.equal(repoProblem(repo.dir), null, 'dentro de um repositório não há problema');
+  });
+});

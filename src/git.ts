@@ -123,3 +123,26 @@ export function renamedFiles(cwd: string, from: string, to: string): Array<{ fro
   }
   return out;
 }
+
+/**
+ * Por que esta pasta não pode ser analisada, em português e dizendo o que fazer; null se está tudo certo.
+ * Distingue pasta sem git, git não instalado e pasta recusada pelo git por segurança.
+ */
+export function repoProblem(cwd: string): string | null {
+  const res = git(cwd, ['rev-parse', '--is-inside-work-tree']);
+  const err = res.stderr.trim();
+  if (res.code === 0 && res.stdout.trim() === 'true') return null;
+  if (res.code === 127 || /ENOENT|not recognized|não é reconhecido/i.test(err)) {
+    return 'o git não foi encontrado neste computador. Instale em https://git-scm.com e reabra o editor.';
+  }
+  if (/dubious ownership|safe\.directory/i.test(err)) {
+    return `o git recusou a pasta por segurança ("dubious ownership"): ela pertence a outro usuário do computador. Para liberar, rode: git config --global --add safe.directory "${cwd.split('\\').join('/')}"`;
+  }
+  if (res.code === 0) {
+    return `a pasta ${cwd} está dentro da pasta .git ou é um repositório sem arquivos de trabalho (bare). Abra a pasta do projeto.`;
+  }
+  if (/not a git repository/i.test(err)) {
+    return `a pasta ${cwd} não é um repositório git (não há .git nela nem em nenhuma pasta acima). Abra a pasta do projeto (no VS Code: Arquivo > Abrir Pasta) ou crie o repositório com "git init".`;
+  }
+  return `o git não conseguiu ler a pasta ${cwd}: ${err.split('\n')[0] || `saiu com código ${res.code}`}`;
+}

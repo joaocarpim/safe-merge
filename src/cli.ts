@@ -6,7 +6,7 @@ import { analyze, UsageError, type AnalysisReport, type Level } from './analyze.
 import { loadConfig, mergeConfig } from './config.js';
 import { fileEmitter, newRunId } from './events.js';
 import { parsePrList } from './github.js';
-import { repoRoot, isGitRepo } from './git.js';
+import { repoProblem, repoRoot, isGitRepo } from './git.js';
 import { renderMarkdown } from './render/markdown.js';
 import { renderText } from './render/text.js';
 import { renderSarif } from './sarif.js';
@@ -116,7 +116,7 @@ async function runAnalyze(argv: string[]): Promise<number> {
   }
 
   const cwd = process.cwd();
-  if (!isGitRepo(cwd)) throw new UsageError('esta pasta não é um repositório git');
+  { const problem = repoProblem(cwd); if (problem) throw new UsageError(problem); }
   const root = repoRoot(cwd);
   let cfg = loadConfig(root, values.config);
   if (isolation) cfg = mergeConfig(cfg, { isolation: { mode: isolation } });
@@ -191,7 +191,7 @@ async function runReplay(argv: string[]): Promise<number> {
   if (!Number.isFinite(limit) || limit < 1) throw new UsageError(`--limit inválido: ${values.limit}`);
   if (!['text', 'json'].includes(values.format as string)) throw new UsageError(`formato inválido: ${values.format}`);
   const cwd = process.cwd();
-  if (!isGitRepo(cwd)) throw new UsageError('esta pasta não é um repositório git');
+  { const problem = repoProblem(cwd); if (problem) throw new UsageError(problem); }
   const root = repoRoot(cwd);
   const { replay, renderReplay } = await import('./structured.js');
   const { runTool } = await import('./tools.js');
@@ -247,7 +247,7 @@ async function runVerifyResolution(argv: string[]): Promise<number> {
     throw new UsageError('uso: safemerge verify-resolution --target <branch> --file <caminho>=<arquivo-proposto> [--file ...] [--test-cmd <cmd>]');
   }
   const cwd = process.cwd();
-  if (!isGitRepo(cwd)) throw new UsageError('esta pasta não é um repositório git');
+  { const problem = repoProblem(cwd); if (problem) throw new UsageError(problem); }
   const root = repoRoot(cwd);
   let cfg = loadConfig(root, values.config);
   if (values.isolation) cfg = mergeConfig(cfg, { isolation: { mode: values.isolation } });
@@ -279,7 +279,7 @@ async function runVerifyResolution(argv: string[]): Promise<number> {
 async function runInstallHook(argv: string[]): Promise<number> {
   const { values } = parseArgs({ args: argv, options: { force: { type: 'boolean' }, timeout: { type: 'string', default: '20' } } });
   const cwd = process.cwd();
-  if (!isGitRepo(cwd)) throw new UsageError('esta pasta não é um repositório git');
+  { const problem = repoProblem(cwd); if (problem) throw new UsageError(problem); }
   const timeoutSec = Number.parseInt(values.timeout as string, 10);
   if (!Number.isFinite(timeoutSec) || timeoutSec < 1) throw new UsageError(`--timeout inválido: ${values.timeout}`);
   const { installHook, currentCommand } = await import('./hook.js');
@@ -336,7 +336,7 @@ async function runMatrix(argv: string[]): Promise<number> {
   if (!Number.isFinite(limit) || limit < 1) throw new UsageError(`--limit inválido: ${values.limit}`);
   if (!['text', 'markdown', 'json'].includes(values.format as string)) throw new UsageError(`formato inválido: ${values.format}`);
   const cwd = process.cwd();
-  if (!isGitRepo(cwd)) throw new UsageError('esta pasta não é um repositório git');
+  { const problem = repoProblem(cwd); if (problem) throw new UsageError(problem); }
   const root = repoRoot(cwd);
   const { matrix, renderMatrixText, renderMatrixMarkdown } = await import('./matrix.js');
   let result;

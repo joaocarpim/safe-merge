@@ -13,7 +13,7 @@ import {
 } from './branches.js';
 import type { Config } from './config.js';
 import { noopEmit, type Emit, type Phase, type PhaseStatus } from './events.js';
-import { git, isGitRepo, mergeCommit, refExists, repoRoot, revParse, shortSha } from './git.js';
+import { git, mergeCommit, refExists, repoProblem, repoRoot, revParse, shortSha } from './git.js';
 import { listOpenPrs, type PrListing } from './github.js';
 import { simulateMerge, type MergeResult } from './merge.js';
 import { findOverlaps, type OverlapEntry } from './overlap.js';
@@ -308,7 +308,7 @@ export function buildVerdict(report: VerdictInput, cfg: Config): Verdict {
 export function analyze(opts: AnalyzeOptions): AnalysisReport {
   const started = Date.now();
   const emit = opts.emit ?? noopEmit;
-  if (!isGitRepo(opts.cwd)) throw new UsageError('esta pasta não é um repositório git');
+  { const problem = repoProblem(opts.cwd); if (problem) throw new UsageError(problem); }
   const cwd = repoRoot(opts.cwd);
   const cfg = opts.cfg;
   const warnings: string[] = [];
