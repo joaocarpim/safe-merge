@@ -193,6 +193,7 @@ describe('variáveis de ambiente', () => {
     assert.deepEqual(uses.map((u) => u.name), ['PIX_API_KEY', 'BANCO_URL', 'FILA']);
     assert.ok(documentedIn('A=1\nexport PIX_API_KEY=\n', 'PIX_API_KEY'));
     assert.ok(!documentedIn('# PIX_API_KEY sem valor\n', 'PIX_API_KEY'));
+    assert.ok(documentedIn('# B2_KEY_ID=\n# B2_REGION=us-west-004\n', 'B2_REGION'), 'variável opcional documentada comentada');
   });
 
   it('variável nova sem .env.example é aviso; documentada é lembrete; já existente é ignorada', () => {

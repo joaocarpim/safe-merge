@@ -1,6 +1,7 @@
 import { clip, type Confidence, type FindingDraft, type Severity } from '../findings.js';
 import { git } from '../git.js';
 import { TEST_FILE } from './hygiene.js';
+import { GENERATED, isCommentLine } from './paths.js';
 import type { Check, CheckContext, CheckOutput } from './types.js';
 
 /**
@@ -15,20 +16,28 @@ const MIGRATION = /(^|\/)(migrations?|db\/migrate|db\/migration|prisma\/migratio
 const BATCH_PATH = /(^|\/)(tasks?|jobs?|workers?|scripts?|seeds?|seeders|commands?|management\/commands)\/|(Job|Scheduler|Seeder)\.(java|kt|ts|js)$/;
 
 const LOOP = /^(\s*)(for\b|while\b|.*\.forEach\s*\(|.*\.map\s*\(\s*(async\s*)?\(?)/;
-const QUERY = /\.objects\.(get|filter|exclude|create|all)|\.(filter|exclude|aggregate)\(|cursor\.execute|\b(prisma|db|tx|knex|repository|repo|entityManager|em|jdbcTemplate|queryRunner|manager|session)\s*\.\s*(\w+\s*\.\s*)?(find\w*|findUnique|findFirst|save\w*|delete\w*|update\w*|insert\w*|count|exists\w*|query\w*|create\w*|upsert|persist|merge|remove|get)\s*\(|\.objects\b|\$queryRaw|createQuery\(|SELECT\s.+\sFROM\s/i;
+// chamadas de banco comuns a qualquer linguagem (cliente, repositório, SQL cru)
+const QUERY_COMMON = /cursor\.execute|\b(prisma|db|tx|knex|repository|repo|entityManager|em|jdbcTemplate|queryRunner|manager|session)\s*\.\s*(\w+\s*\.\s*)?(find\w*|findUnique|findFirst|save\w*|delete\w*|update\w*|insert\w*|count|exists\w*|query\w*|create\w*|upsert|persist|merge|remove|get)\s*\(|\$queryRaw|createQuery\(|SELECT\s.+\sFROM\s/i;
+// ORM de Python/Ruby: .filter() e .count() só são banco nessas linguagens (em JS/TS são métodos de array)
+const QUERY_ORM = /\.objects\b|\.(filter|exclude|aggregate)\(|\.(save|delete|count|exists)\(\)|\.(update_or_create|get_or_create|bulk_create|bulk_update)\(/;
 const LOCK = /select_for_update|with_for_update|FOR UPDATE|advisory_lock|@Lock\(|PESSIMISTIC_|@Version\b|synchronized|ReentrantLock|Mutex|redlock|\.acquire\(|\$transaction\(.*isolationLevel|SERIALIZABLE/i;
 const HTTP = /\b(requests|httpx|session|client)\.(get|post|put|patch|delete|request)\(|urlopen\(|\baxios(\.(get|post|put|patch|delete|request))?\s*\(|(?<![\w.])fetch\s*\(|restTemplate\.(getFor\w+|postFor\w+|put|delete|exchange|execute)\s*\(|webClient\s*\.\s*(get|post|put|patch|delete|method)\s*\(|http\.(Get|Post|NewRequest)\(|\.newCall\s*\(/;
 const TIMEOUT = /timeout|Timeout|deadline|AbortSignal|AbortController|signal\s*:|context\.WithTimeout|responseTimeout|connectTimeout|readTimeout/;
 const CATCH = /^\s*\}?\s*(except\b[^:]*:|catch\s*(\([^)]*\))?\s*\{?|rescue\b.*)\s*$/;
-const SWALLOW = /^\s*(pass|continue|\.\.\.|return;?|\}|\/\/.*|#.*)?\s*$/;
-const COUNTER = /\b(version|versao|numero|number|sequence|seq|counter|contador)\w*\s*(\+=\s*1|=\s*[\w.[\]"']+\s*\+\s*1)|aggregate\([^)]*Max\(|Max\(\s*["']?(version|numero|number|sequence)/i;
+// engolir = não fazer nada. `return`/comentário depois do catch é tratamento (ou vem o tratamento depois do comentário)
+const SWALLOW = /^\s*(pass|continue|\.\.\.|\})\s*$/;
+// próximo número calculado a partir de outro registro (ultimo.numero + 1). `i += 1` de laço local não conta.
+const COUNTER = /\b(version|versao|numero|number|sequence|seq)\w*\s*=\s*[\w[\]"']+\.[\w.[\]"']+\s*\+\s*1|aggregate\([^)]*Max\(|Max\(\s*["']?(version|numero|number|sequence)/i;
 const IDEMP = /idempot/i;
 const EXTERNAL_WRITE = /(gateway|client|api|http|provider|sdk|service|processor|stripe|psp|pix|mercadopago|asaas)\w*\.\w*(pay|charge|capture|transfer|payout|refund|create|send|post|execute|cobr)\w*\s*\(/i;
 const TX = /transaction\.atomic|@Transactional|\$transaction\(|\.transaction\(|beginTransaction\(|BEGIN\b/;
 const HEAVY_IO = /readFileSync|\.read\(\)|open\(|requests\.|httpx\.|axios\.|fetch\(|restTemplate\.|webClient\.|HttpClient|urlopen\(|sleep\(/;
-const LIST_FIELD = /ListField\(|ArrayField\(|ListSerializer\(|z\.array\(|@RequestBody\s+List<|Joi\.array\(|t\.array\(/;
+const LIST_FIELD = /(?<![\w])(ListField|ArrayField|ListSerializer)\(|z\.array\(|@RequestBody\s+List<|Joi\.array\(|t\.array\(/;
 const LIST_BOUND = /max_length|max_items|max_num|maxItems|@Size\(|@ArrayMaxSize|\.max\(\s*\d|\.length\(\s*\d/;
-const DESTRUCTIVE = /\bDROP\s+(TABLE|COLUMN|DATABASE|SCHEMA)\b|\bTRUNCATE\b|\.objects\.all\(\)\.delete\(\)|\bdeleteMany\(\s*\)|\bDELETE\s+FROM\s+\w+\s*;?\s*$/i;
+// TRUNCATE só em maiúsculas: "truncate" minúsculo é a classe CSS do Tailwind
+const DESTRUCTIVE_CI = /\bDROP\s+(TABLE|COLUMN|DATABASE|SCHEMA)\b|\bTRUNCATE\s+TABLE\b|\bDELETE\s+FROM\s+\w+\s*;?\s*$/i;
+const DESTRUCTIVE_CS = /\.objects\.all\(\)\.delete\(\)|\bdeleteMany\(\s*\)|\bTRUNCATE\s+\w+\s*;?\s*$/;
+const DESTRUCTIVE = { test: (s: string) => DESTRUCTIVE_CI.test(s) || DESTRUCTIVE_CS.test(s) };
 const IRREVERSIBLE = /RunPython\([^,)]+\)\s*$|reverse_code\s*=\s*None|irreversible|raise\s+(ActiveRecord::)?IrreversibleMigration/;
 
 interface Row {
@@ -74,7 +83,7 @@ export function parseRows(diff: string): Map<string, { rows: Row[]; added: strin
 type Add = (rule: string, title: string, message: string, severity: Severity, confidence: Confidence, row: Row) => void;
 
 function fileRisks(path: string, f: { rows: Row[]; added: string; removed: string }, add: Add): void {
-  const added = f.rows.filter((r) => r.kind === '+');
+  const added = f.rows.filter((r) => r.kind === '+' && !isCommentLine(r.text));
   const migration = MIGRATION.test(path);
 
   if (migration) {
@@ -84,7 +93,8 @@ function fileRisks(path: string, f: { rows: Row[]; added: string; removed: strin
     }
     return;
   }
-  if (!CODE_FILE.test(path) || TEST_FILE.test(path)) return;
+  if (!CODE_FILE.test(path) || TEST_FILE.test(path) || GENERATED.test(path)) return;
+  const QUERY = /\.(py|rb)$/.test(path) ? new RegExp(`${QUERY_COMMON.source}|${QUERY_ORM.source}`, 'i') : QUERY_COMMON;
   const hasLock = LOCK.test(f.added);
 
   // contador/versão calculado sem lock
@@ -138,7 +148,7 @@ function fileRisks(path: string, f: { rows: Row[]; added: string; removed: strin
   for (let i = 0; i < f.rows.length - 1; i++) {
     const r = f.rows[i]!;
     if (!CATCH.test(r.text)) continue;
-    const next = f.rows.slice(i + 1).find((x) => x.text.trim() !== '');
+    const next = f.rows.slice(i + 1).find((x) => x.text.trim() !== '' && !isCommentLine(x.text));
     if (next && next.kind === '+' && SWALLOW.test(next.text) && (r.kind === '+' || next.kind === '+')) {
       add('swallowed-exception', 'Exceção capturada e descartada', 'O erro é capturado e ignorado: a falha some sem log nem reação, e o problema aparece longe da causa.', 'medium', 'medium', r.kind === '+' ? r : next);
       break;
@@ -148,7 +158,7 @@ function fileRisks(path: string, f: { rows: Row[]; added: string; removed: strin
   // lista de entrada sem limite
   if (/serializer|schema|dto|request|payload|validator|validation/i.test(path)) {
     const r = added.find((x) => LIST_FIELD.test(x.text) && !LIST_BOUND.test(x.text));
-    if (r) add('unbounded-list', 'Lista de entrada sem limite de tamanho', 'Um payload com milhares de itens vira milhares de linhas/consultas. Defina um máximo (max_length, .max(n), @Size).', 'low', 'medium', r);
+    if (r) add('unbounded-list', 'Lista de entrada sem limite de tamanho', 'Se esta lista é de ENTRADA, um payload com milhares de itens vira milhares de linhas/consultas: defina um máximo (max_length, .max(n), @Size). Em serializer de saída não precisa.', 'low', 'low', r);
   }
 
   // SQL destrutivo fora de migração

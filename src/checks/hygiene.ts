@@ -1,5 +1,6 @@
 import { addedLines, touchedFiles, type AddedLine } from '../diff.js';
 import { clip, type Confidence, type FindingDraft, type Severity } from '../findings.js';
+import { CONFIG_FILE, GENERATED, isCommentLine } from './paths.js';
 import type { Check, CheckContext, CheckOutput } from './types.js';
 
 const CODE_FILE = /\.(m?[jt]sx?|cjs|cts|mts|vue|svelte|py|go|rb|php|java|kt|cs|dart|rs)$/;
@@ -15,6 +16,12 @@ interface Rule {
   confidence: Confidence;
   /** Onde a regra vale: código de produção (padrão), só testes, ou qualquer arquivo de código. */
   where?: 'prod' | 'test' | 'any' | 'all-files';
+  /** A regra vale também em linhas de comentário (ex.: TODO). Padrão: comentários são ignorados. */
+  inComments?: boolean;
+  /** Arquivos em que o achado vira só observação (ex.: endpoint de login é público de propósito). */
+  softPath?: RegExp;
+  /** Ignora arquivos de configuração e linhas com valor padrão de variável de ambiente. */
+  skipConfig?: boolean;
 }
 
 /**
@@ -42,11 +49,20 @@ export const HYGIENE_RULES: Rule[] = [
   },
   {
     id: 'tls-or-auth-disabled',
-    title: 'Verificação de TLS ou de autenticação desligada',
-    message: 'O código desliga uma proteção (certificado TLS, CSRF ou permissão). Em produção isso abre a porta para ataque; se for só para desenvolvimento, isole por ambiente.',
-    re: /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=?\s*["']?0|verify\s*=\s*False|@csrf_exempt|\bcsrf_exempt\b|permission_classes\s*=\s*\[\s*AllowAny|InsecureSkipVerify\s*:\s*true|cors\(\s*\{[^}]*origin\s*:\s*["']\*["']/,
+    title: 'Verificação de TLS desligada',
+    message: 'O código desliga a verificação do certificado TLS (ou libera qualquer origem no CORS). Em produção isso abre a porta para ataque; se for só para desenvolvimento, isole por ambiente.',
+    re: /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=?\s*["']?0|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|cors\(\s*\{[^}]*origin\s*:\s*["']\*["']/,
     severity: 'medium',
     confidence: 'high',
+  },
+  {
+    id: 'auth-disabled',
+    title: 'Endpoint sem autenticação (AllowAny / csrf_exempt)',
+    message: 'O endpoint libera qualquer pessoa (AllowAny) ou desliga a proteção CSRF. Confirme que é público de propósito (login, cadastro, webhook); nesses arquivos aparece só como observação.',
+    re: /@csrf_exempt|\bcsrf_exempt\b|permission_classes\s*=\s*\[\s*AllowAny/,
+    severity: 'medium',
+    confidence: 'low',
+    softPath: /(auth|login|logout|signup|sign-up|register|password|reset|invite|webhook|health|public|callback|oauth|sso|token|verify|confirm)/i,
   },
   {
     id: 'unsafe-secret-compare',
@@ -80,6 +96,7 @@ export const HYGIENE_RULES: Rule[] = [
     re: /https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?/,
     severity: 'low',
     confidence: 'high',
+    skipConfig: true,
   },
   {
     id: 'type-escape',
@@ -97,6 +114,7 @@ export const HYGIENE_RULES: Rule[] = [
     severity: 'info',
     confidence: 'high',
     where: 'any',
+    inComments: true,
   },
 ];
 
@@ -128,14 +146,18 @@ export function hygieneFindings(lines: AddedLine[], perFile = 3): FindingDraft[]
   const out: FindingDraft[] = [];
   const count = new Map<string, number>();
   for (const l of lines) {
-    if (/\.(min\.js|map|lock)$|(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/.test(l.file)) continue;
+    if (GENERATED.test(l.file) || /\.(lock)$|(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/.test(l.file)) continue;
+    const comment = isCommentLine(l.text);
     for (const rule of HYGIENE_RULES) {
       if (!applies(rule, l.file) || !rule.re.test(l.text)) continue;
+      if (comment && !rule.inComments && rule.id !== 'conflict-marker') continue;
+      // valor padrão de desenvolvimento: arquivo de configuração ou fallback de variável de ambiente
+      if (rule.skipConfig && (CONFIG_FILE.test(l.file) || /environ|getenv|process\.env|import\.meta\.env|\$\{/.test(l.text))) continue;
       const key = `${rule.id}:${l.file}`;
       const n = count.get(key) ?? 0;
       if (n >= perFile) continue;
       count.set(key, n + 1);
-      out.push({ category: 'hygiene', rule: rule.id, title: rule.title, message: rule.message, severity: rule.severity, confidence: rule.confidence, file: l.file, line: l.line, evidence: clip(l.text), source: 'safemerge' });
+      out.push({ category: 'hygiene', rule: rule.id, title: rule.title, message: rule.message, severity: rule.softPath?.test(l.file) ? 'info' : rule.severity, confidence: rule.confidence, file: l.file, line: l.line, evidence: clip(l.text), source: 'safemerge' });
     }
   }
   return out;

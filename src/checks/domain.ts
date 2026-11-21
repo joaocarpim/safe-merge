@@ -1,6 +1,7 @@
 import { compileRegexes } from '../config.js';
 import { addedLines, showFile, type AddedLine } from '../diff.js';
 import { clip, type FindingDraft } from '../findings.js';
+import { GENERATED, isCommentLine } from './paths.js';
 import type { Check, CheckContext, CheckOutput } from './types.js';
 
 const CODE_FILE = /\.(m?[jt]sx?|cjs|cts|mts|vue|svelte|py|go|rb|php|java|kt|cs)$/;
@@ -82,7 +83,7 @@ export const domainCheck: Check = {
   label: 'Regras de domínio (tenant, LGPD, rota sem autenticação)',
   run(ctx: CheckContext): CheckOutput {
     const d = ctx.cfg.domain;
-    const lines = addedLines(ctx.cwd, ctx.mergeBase, ctx.headRef).filter((l) => CODE_FILE.test(l.file) && !TEST_FILE.test(l.file));
+    const lines = addedLines(ctx.cwd, ctx.mergeBase, ctx.headRef).filter((l) => CODE_FILE.test(l.file) && !TEST_FILE.test(l.file) && !GENERATED.test(l.file) && !isCommentLine(l.text));
     if (lines.length === 0) {
       return { coverage: { check: this.id, label: this.label, status: 'skipped', reason: 'nenhuma linha de código nova fora de testes' }, findings: [] };
     }

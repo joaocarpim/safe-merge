@@ -8,6 +8,7 @@ interface LockEntry {
   integrity?: string;
   hasInstallScript?: boolean;
   link?: boolean;
+  optional?: boolean;
 }
 
 interface ParsedLock {
@@ -25,6 +26,17 @@ export function parseLock(text: string | null): ParsedLock | null {
   } catch {
     return null;
   }
+}
+
+/** Pacotes populares cujo script de instalação é legítimo (binário nativo, download da plataforma). */
+export const KNOWN_INSTALL_SCRIPTS = new Set([
+  'fsevents', 'esbuild', 'sharp', 'core-js', 'husky', 'bcrypt', 'sqlite3', 'better-sqlite3', 'canvas', 'puppeteer', 'playwright',
+  'cypress', 'electron', 'protobufjs', 'nodemon', 'unrs-resolver', 'msw', 'prisma', 'lightningcss', 'node-sass', 'sass', 're2',
+  'bufferutil', 'utf-8-validate', 'keytar', 'tree-sitter', 'nx', 'turbo', 'workerd', 'bun', 'oxc-resolver',
+]);
+
+function isKnownInstaller(name: string): boolean {
+  return KNOWN_INSTALL_SCRIPTS.has(name) || /^@(esbuild|swc|parcel|rollup|next|img|biomejs|napi-rs|tailwindcss|prisma|sentry|oxc-resolver|unrs|lightningcss)\//.test(name);
 }
 
 function packageName(key: string): string {
@@ -53,14 +65,17 @@ export function diffLock(path: string, beforeText: string | null, afterText: str
     const keyLine = findLine(afterText, `"${key}": {`) ?? null;
     const base = { file: path, source: 'safemerge', category: 'supply-chain' } as const;
 
+    const known = isKnownInstaller(name) || entry.optional === true;
     if (entry.hasInstallScript && !old?.hasInstallScript) {
       const line = keyLine ? (findLine(afterText, '"hasInstallScript"', keyLine) ?? keyLine) : null;
       findings.push({
         ...base,
         rule: 'install-script',
         title: 'Pacote novo com script de instalação',
-        message: `${at} roda código na instalação (preinstall/install/postinstall). É o vetor de worms como o Shai-Hulud: confira se o pacote é esperado e confiável.`,
-        severity: 'high',
+        message: known
+          ? `${at} roda código na instalação, mas é um pacote conhecido por isso (binário nativo ou download da plataforma)${entry.optional ? ' e é dependência opcional' : ''}. Só confira se é o pacote oficial.`
+          : `${at} roda código na instalação (preinstall/install/postinstall). É o vetor de worms como o Shai-Hulud: confira se o pacote é esperado e confiável.`,
+        severity: known ? 'info' : 'high',
         confidence: 'high',
         line,
         evidence: `${key}: "hasInstallScript": true (versão ${entry.version ?? '?'})`,

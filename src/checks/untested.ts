@@ -1,6 +1,7 @@
 import { posix } from 'node:path';
 import { addedLines, listTree } from '../diff.js';
 import type { FindingDraft } from '../findings.js';
+import { GENERATED } from './paths.js';
 import type { Check, CheckContext, CheckOutput } from './types.js';
 
 const CODE_FILE = /\.(m?[jt]sx?|cjs|cts|mts|vue|svelte|py|go|rb|php|java|kt|cs|rs)$/;
@@ -33,7 +34,7 @@ export const untestedCheck: Check = {
   id: 'untested',
   label: 'Linhas alteradas sem teste',
   run(ctx: CheckContext): CheckOutput {
-    const added = addedLines(ctx.cwd, ctx.mergeBase, ctx.headRef).filter((l) => CODE_FILE.test(l.file) && !TEST_FILE.test(l.file) && !NOT_LOGIC.test(l.file));
+    const added = addedLines(ctx.cwd, ctx.mergeBase, ctx.headRef).filter((l) => CODE_FILE.test(l.file) && !TEST_FILE.test(l.file) && !NOT_LOGIC.test(l.file) && !GENERATED.test(l.file));
     if (added.length === 0) {
       return { coverage: { check: this.id, label: this.label, status: 'skipped', reason: 'nenhuma linha de código nova fora de testes' }, findings: [] };
     }
@@ -54,6 +55,18 @@ export const untestedCheck: Check = {
         line: lines[0]!.line,
         evidence: `${lines.length} linha(s) nova(s); nenhum teste com "${stem(file)}" no nome`,
         source: 'safemerge',
+      });
+    }
+    // branch grande: um resumo só, em vez de um cartão por arquivo
+    if (findings.length > 8) {
+      const n = findings.length;
+      const first = findings[0]!;
+      const sample = findings.slice(0, 4).map((f) => f.file).join(', ');
+      findings.splice(0, n, {
+        ...first,
+        title: `${n} arquivos de código alterados sem teste com o nome deles`,
+        message: `${n} arquivos de código alterados sem arquivo de teste com o nome deles (ex.: ${sample}…). A checagem semântica (testes no merge) provavelmente não cobre essas linhas.`,
+        evidence: `${n} arquivo(s) sem teste correspondente por nome`,
       });
     }
     return {

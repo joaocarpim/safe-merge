@@ -1,6 +1,8 @@
 import { parseAddedLines } from '../diff.js';
 import { clip, type Confidence, type FindingDraft, type Severity } from '../findings.js';
 import { git } from '../git.js';
+import { TEST_FILE } from './hygiene.js';
+import { GENERATED, looksLikePlaceholder } from './paths.js';
 
 /**
  * Regras internas usadas quando a ferramenta especializada não está instalada. Cobrem os casos mais
@@ -61,11 +63,12 @@ export function scanSecrets(cwd: string, from: string, to: string): SecretHit[] 
     const commit = chunk.slice(0, 40);
     if (!/^[0-9a-f]{40}$/.test(commit)) continue;
     for (const l of parseAddedLines(chunk.slice(41))) {
-      if (SKIP_FILE.test(l.file)) continue;
+      if (SKIP_FILE.test(l.file) || GENERATED.test(l.file)) continue;
+      const fixture = TEST_FILE.test(l.file) || looksLikePlaceholder(l.text);
       let specific = false;
       for (const rule of SECRET_RULES) {
         // a regra genérica só vale quando nenhuma específica achou nada na linha
-        if (rule.id === 'generic-secret' && specific) continue;
+        if (rule.id === 'generic-secret' && (specific || fixture)) continue; // senha de teste/exemplo não é segredo
         for (const m of l.text.matchAll(new RegExp(rule.re.source, `${rule.re.flags.replace('g', '')}g`))) {
           if (rule.id !== 'generic-secret') specific = true;
           const key = `${rule.id}:${l.file}:${m[0]}`;

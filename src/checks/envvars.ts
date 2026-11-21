@@ -43,7 +43,8 @@ export function envUses(lines: AddedLine[]): EnvUse[] {
 }
 
 export function documentedIn(text: string, name: string): boolean {
-  return new RegExp(`^\\s*(export\\s+)?${name}\\s*=`, 'm').test(text);
+  // vale também a linha comentada (# NOME=): é a convenção para variável opcional
+  return new RegExp(`^\\s*#?\\s*(export\\s+)?${name}\\s*=`, 'm').test(text);
 }
 
 /**
@@ -81,6 +82,18 @@ export const envVarsCheck: Check = {
             confidence: 'medium',
           };
     });
+    // muitas variáveis já documentadas: um resumo só
+    const documented = findings.filter((f) => f.rule === 'new-variable');
+    if (documented.length > 5) {
+      const rest = findings.filter((f) => f.rule !== 'new-variable');
+      const first = documented[0]!;
+      findings.splice(0, findings.length, ...rest, {
+        ...first,
+        title: `${documented.length} variáveis de ambiente novas (todas documentadas)`,
+        message: `A branch passa a ler ${documented.length} variáveis de ambiente novas, todas no .env.example (ex.: ${documented.slice(0, 4).map((f) => f.title.split(': ')[1]).join(', ')}…). Configure em todos os ambientes antes do deploy.`,
+        evidence: `${documented.length} variáveis documentadas`,
+      });
+    }
     const reason = uses.length === 0 ? 'nenhuma leitura de variável de ambiente nas linhas novas' : `${uses.length} variável(is) lida(s) nas linhas novas, ${fresh.length} nova(s) no projeto`;
     return { coverage: { check: this.id, label: this.label, status: 'ran', reason }, findings };
   },
