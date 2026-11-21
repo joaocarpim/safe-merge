@@ -18,6 +18,10 @@ export interface CheckContext {
   others: BranchRef[];
   cfg: Config;
   tools: ToolRunner;
+  /** Descrição do PR (gh ou --body). null quando não há PR nem --body. */
+  description?: string | null;
+  /** PR aberto desta branch, se o gh achou. */
+  pr?: { number: number; title: string } | null;
 }
 
 export interface CheckOutput {

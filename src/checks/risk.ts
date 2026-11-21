@@ -80,6 +80,22 @@ export function parseRows(diff: string): Map<string, { rows: Row[]; added: strin
   return files;
 }
 
+/**
+ * A linha está dentro de um bloco de texto (template `...` de JS, ''' ou """ de Dart/Python/Kotlin)?
+ * Conta os delimitadores nas linhas anteriores do mesmo arquivo no diff: ímpar = dentro.
+ */
+export function insideStringBlock(rows: Array<{ text: string }>, target: { text: string }): boolean {
+  let backticks = 0;
+  let triple = 0;
+  for (const row of rows) {
+    if (row === target) break;
+    const t = row.text.replace(/\\./g, '');
+    backticks += (t.match(/`/g) ?? []).length;
+    triple += (t.match(/'''|"""/g) ?? []).length;
+  }
+  return backticks % 2 === 1 || triple % 2 === 1;
+}
+
 type Add = (rule: string, title: string, message: string, severity: Severity, confidence: Confidence, row: Row) => void;
 
 function fileRisks(path: string, f: { rows: Row[]; added: string; removed: string }, add: Add): void {
@@ -123,7 +139,7 @@ function fileRisks(path: string, f: { rows: Row[]; added: string; removed: strin
         continue;
       }
       if (loopIndent !== null && r.kind === '+' && indent > loopIndent && QUERY.test(t) && !LOCK.test(t)) {
-        add('query-in-loop', 'Consulta ao banco dentro de laço (N+1)', 'Uma ida ao banco por item do laço: com mil itens, mil consultas. Busque tudo de uma vez (IN, include/select_related, createMany/bulk).', 'medium', 'medium', r);
+        add('query-in-loop', 'Consulta ao banco dentro de laço (N+1)', 'Uma ida ao banco por item do laço: com mil itens, mil consultas. Busque tudo de uma vez (IN, include/select_related, createMany/bulk).', 'medium', 'low', r);
         break;
       }
     }
@@ -135,12 +151,16 @@ function fileRisks(path: string, f: { rows: Row[]; added: string; removed: strin
     if (r) add('long-transaction', 'Transação com lock segurando I/O', 'A transação trava linhas e, dentro dela, faz chamada HTTP/arquivo/espera: a linha fica presa por segundos e outras requisições enfileiram. Faça o trabalho lento fora da transação.', 'medium', 'medium', r);
   }
 
-  // HTTP sem timeout
+  // HTTP sem timeout. fetch() só é HTTP em JS/TS; e não conta dentro de string (JS injetado num WebView,
+  // template de código): ali o código não roda no servidor.
+  const jsLike = /\.(m?[jt]sx?|cjs|cts|mts)$/.test(path);
   for (const r of added) {
     if (!HTTP.test(r.text) || TIMEOUT.test(r.text)) continue;
+    if (!jsLike && !HTTP.test(r.text.replace(/(?<![\w.])fetch\s*\(/g, ''))) continue;
+    if (insideStringBlock(f.rows, r)) continue;
     const i = f.added.indexOf(r.text);
     if (TIMEOUT.test(f.added.slice(i, i + 400))) continue;
-    add('http-without-timeout', 'Chamada HTTP sem timeout', 'Se o serviço do outro lado travar, esta requisição (e o worker) fica presa até cair. Defina timeout (AbortSignal.timeout, timeout=, connectTimeout).', 'medium', 'medium', r);
+    add('http-without-timeout', 'Chamada HTTP sem timeout', 'Se o serviço do outro lado travar, esta requisição (e o worker) fica presa até cair. Defina timeout (AbortSignal.timeout, timeout=, connectTimeout).', 'medium', 'low', r);
     break;
   }
 
@@ -148,9 +168,13 @@ function fileRisks(path: string, f: { rows: Row[]; added: string; removed: strin
   for (let i = 0; i < f.rows.length - 1; i++) {
     const r = f.rows[i]!;
     if (!CATCH.test(r.text)) continue;
-    const next = f.rows.slice(i + 1).find((x) => x.text.trim() !== '' && !isCommentLine(x.text));
-    if (next && next.kind === '+' && SWALLOW.test(next.text) && (r.kind === '+' || next.kind === '+')) {
-      add('swallowed-exception', 'Exceção capturada e descartada', 'O erro é capturado e ignorado: a falha some sem log nem reação, e o problema aparece longe da causa.', 'medium', 'medium', r.kind === '+' ? r : next);
+    const after = f.rows.slice(i + 1);
+    const nextAt = after.findIndex((x) => x.text.trim() !== '' && !isCommentLine(x.text));
+    const next = nextAt === -1 ? undefined : after[nextAt];
+    // comentário dentro do catch = descarte intencional e documentado (fallback), não erro esquecido
+    const documented = after.slice(0, Math.max(0, nextAt)).some((x) => isCommentLine(x.text)) || /\/\/|#|\/\*/.test(r.text.replace(/["'`][^"'`]*["'`]/g, ''));
+    if (next && !documented && next.kind === '+' && SWALLOW.test(next.text) && (r.kind === '+' || next.kind === '+')) {
+      add('swallowed-exception', 'Exceção capturada e descartada', 'O erro é capturado e ignorado: a falha some sem log nem reação, e o problema aparece longe da causa.', 'medium', 'low', r.kind === '+' ? r : next);
       break;
     }
   }

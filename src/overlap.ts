@@ -29,6 +29,8 @@ export interface OverlapEntry {
   conflictFiles: string[];
   lastCommit: TouchInfo | null;
   ageDays: number;
+  /** Só na branch empilhada: commits dela que o destino não tem (maior = base mais próxima da sua). */
+  stackDepth?: number;
 }
 
 export interface OverlapInput {
@@ -143,6 +145,7 @@ export function findOverlaps(input: OverlapInput): OverlapEntry[] {
       conflictFiles,
       lastCommit: touch,
       ageDays,
+      ...(relation === 'ours-contains-theirs' ? { stackDepth: Number(git(cwd, ['rev-list', '--count', `${primary.ref}..${cand.ref}`]).stdout.trim()) || 0 } : {}),
     });
   }
 

@@ -32,6 +32,8 @@ Opções de analyze:
   --no-overlap         Não procura outras branches/PRs nos mesmos arquivos
   --no-prs             Não associa branches a PRs abertas (não usa o gh)
   --prs-file <json>    Usa PRs deste arquivo (mesmo formato do "gh pr list --json") em vez do gh
+  --body <texto>       Descrição do PR (quando não há PR aberto ou sem gh); confere deploy, seções…
+  --body-file <arq>    Igual a --body, lendo de um arquivo
   --test-cmd <cmd>     Roda este comando de testes no resultado do merge
   --build-cmd <cmd>    Roda este build antes dos testes no resultado do merge
   --isolation <modo>   auto (padrão: Docker sem rede se houver), docker (exige) ou none
@@ -72,6 +74,8 @@ async function runAnalyze(argv: string[]): Promise<number> {
         'no-overlap': { type: 'boolean' },
         'no-prs': { type: 'boolean' },
         'prs-file': { type: 'string' },
+        body: { type: 'string' },
+        'body-file': { type: 'string' },
         'test-cmd': { type: 'string' },
         'build-cmd': { type: 'string' },
         isolation: { type: 'string' },
@@ -147,6 +151,7 @@ async function runAnalyze(argv: string[]): Promise<number> {
     buildCommand: values['build-cmd'],
     security: !values['no-security'],
     emit: emitter?.emit,
+    body: values['body-file'] ? readFileSync(values['body-file'], 'utf8') : (values.body ?? null),
   });
 
   if (values.save) {

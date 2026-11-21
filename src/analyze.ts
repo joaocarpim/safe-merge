@@ -17,6 +17,8 @@ import { git, mergeCommit, refExists, repoProblem, repoRoot, revParse, shortSha 
 import { listOpenPrs, type PrListing } from './github.js';
 import { simulateMerge, type MergeResult } from './merge.js';
 import { findOverlaps, type OverlapEntry } from './overlap.js';
+import { compileRegexes } from './config.js';
+import { detectTestCommand } from './testcmd.js';
 import { semanticCheck, type SemanticResult } from './semantic.js';
 import { SECURITY_CHECKS, type Check, type CheckContext, type CheckOutput } from './checks/index.js';
 import { finalizeFindings, type CoverageEntry, type Finding, type FindingDraft } from './findings.js';
@@ -52,6 +54,8 @@ export interface AnalyzeOptions {
   emit?: Emit;
   listPrs?: (cwd: string) => PrListing;
   now?: () => number;
+  /** Descrição do PR passada à mão (--body). Tem prioridade sobre a que o gh traz. */
+  body?: string | null;
 }
 
 export type Level = 'ok' | 'warn' | 'block';
@@ -259,8 +263,15 @@ export function buildVerdict(report: VerdictInput, cfg: Config): Verdict {
     const what = o.sameFunctions.map((s) => `${s.functions.join(', ')} (${s.path})`).join('; ');
     add('warn', `${o.pr ? `#${o.pr.number}` : o.branch} também altera ${what}: o git junta sem conflito, mas quem mergear depois deve conferir a lógica`);
   }
-  for (const o of report.overlaps.filter((x) => x.relation === 'ours-contains-theirs')) {
-    add('warn', `PR empilhado: esta branch está sobre ${o.pr ? `#${o.pr.number}` : o.branch}, que precisa ser mergeada primeiro`);
+  const stack = report.overlaps.filter((x) => x.relation === 'ours-contains-theirs');
+  if (stack.length > 0) {
+    // a base mais próxima é a que tem mais commits em comum com esta branch (a mais recente da stack)
+    const nearest = [...stack].sort((x, y) => (y.stackDepth ?? 0) - (x.stackDepth ?? 0))[0]!;
+    const name = (o: (typeof stack)[number]) => (o.pr ? `#${o.pr.number}` : o.branch);
+    const openPrs = stack.filter((o) => o.pr);
+    const others = stack.length > 1 ? ` (stack de ${stack.length} branches abaixo desta: ${stack.slice(0, 4).map(name).join(', ')}${stack.length > 4 ? '…' : ''})` : '';
+    // empilhar sobre PR aberto é ordem de merge a respeitar; sobre branch local sem PR é só informação
+    add(openPrs.length > 0 ? 'warn' : 'info', `branch empilhada: entra depois de ${name(nearest)}${others}; mergeie a base da stack primeiro`);
   }
 
   for (const s of report.semantic) {
@@ -378,16 +389,22 @@ export function analyze(opts: AnalyzeOptions): AnalysisReport {
   });
 
   let overlaps: OverlapEntry[] = [];
+  let ignoredBranches: string[] = [];
+  let prs: PrListing = { prs: [] };
+  if (opts.usePrs !== false && remote) {
+    prs = (opts.listPrs ?? listOpenPrs)(cwd);
+    if (prs.warning) warnings.push(prs.warning);
+  }
+  const ownPr = head.name ? prs.prs.find((p) => p.headRefName === head.name) ?? null : null;
   if (opts.overlap !== false) {
     overlaps = elapsed(emit, 'overlap', () => {
-      let prs: PrListing = { prs: [] };
-      if (opts.usePrs !== false && remote) {
-        prs = (opts.listPrs ?? listOpenPrs)(cwd);
-        if (prs.warning) warnings.push(prs.warning);
-      }
       const mainNames = new Set(detected.main.map((b) => b.name));
       const exclude = new Set([...mainNames, ...(head.name ? [head.name] : [])]);
-      const candidates = [...branchMap.all.values()].filter((b) => !exclude.has(b.name));
+      const withPr = new Set(prs.prs.map((p) => p.headRefName));
+      const ignoreBranch = compileRegexes(cfg.overlap.ignoreBranches ?? []);
+      const all = [...branchMap.all.values()].filter((b) => !exclude.has(b.name));
+      const candidates = all.filter((b) => withPr.has(b.name) || !ignoreBranch.some((re) => re.test(b.name)));
+      ignoredBranches = all.filter((b) => !candidates.includes(b)).map((b) => b.name);
       const found = findOverlaps({ cwd, headRef: head.ref, primary, candidates, prs: prs.prs, cfg, exclude, nowMs: opts.now?.() });
       for (const o of found) {
         emit({ type: 'overlap.result', branch: o.branch, wouldConflict: o.wouldConflict, shared: o.sharedFiles.length });
@@ -412,7 +429,14 @@ export function analyze(opts: AnalyzeOptions): AnalysisReport {
   cover(
     opts.overlap === false
       ? { check: 'overlap', label: 'Outras branches e PRs', status: 'skipped', reason: 'desligado (--no-overlap)' }
-      : { check: 'overlap', label: 'Outras branches e PRs', status: 'ran' },
+      : {
+          check: 'overlap',
+          label: 'Outras branches e PRs',
+          status: 'ran',
+          reason: ignoredBranches.length
+            ? `${ignoredBranches.length} branch(es) ignorada(s) pelo nome (overlap.ignoreBranches): ${ignoredBranches.slice(0, 5).join(', ')}${ignoredBranches.length > 5 ? '…' : ''}`
+            : undefined,
+        },
     overlaps.filter((o) => o.wouldConflict).length,
   );
 
@@ -464,7 +488,15 @@ export function analyze(opts: AnalyzeOptions): AnalysisReport {
       drafts.push(...observedFindings(result));
     }
   } else {
-    cover({ check: 'semantic', label: 'Testes no resultado do merge', status: 'skipped', reason: 'sem comando de testes (--test-cmd ou semantic.command)' });
+    const suggested = detectTestCommand(cwd);
+    cover({
+      check: 'semantic',
+      label: 'Testes no resultado do merge',
+      status: 'skipped',
+      reason: suggested
+        ? `sem comando de testes; detectei "${suggested}" no projeto: rode com --test-cmd "${suggested}" (ou semantic.command na configuração) para pegar o conflito que o git não vê`
+        : 'sem comando de testes (--test-cmd ou semantic.command)',
+    });
   }
 
   if (opts.security === false || !cfg.security.enabled) {
@@ -476,7 +508,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisReport {
     elapsed(emit, 'security', () => {
       const others = [...branchMap.all.values()].filter((b) => b.name !== head.name && b.name !== primary.name);
       const mergedCommit = primaryMerge.status === 'clean' ? mergeCommit(cwd, head.ref, primary.ref) : null;
-      const ctx: CheckContext = { cwd, headRef: head.ref, headSha, target: primary, mergeBase: mb, mergedCommit, others, cfg, tools };
+      const description = opts.body ?? ownPr?.body ?? null;
+      const ctx: CheckContext = { cwd, headRef: head.ref, headSha, target: primary, mergeBase: mb, mergedCommit, others, cfg, tools, description, pr: ownPr ? { number: ownPr.number, title: ownPr.title } : null };
       let total = 0;
       for (const check of opts.checks ?? SECURITY_CHECKS) {
         const t0 = Date.now();

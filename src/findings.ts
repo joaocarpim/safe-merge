@@ -66,7 +66,8 @@ export function findingLevel(f: FindingDraft, policy: BlockPolicy): FindingLevel
   if (f.severity === 'info') return 'info';
   const strong = SEVERITY_RANK[f.severity] >= SEVERITY_RANK[policy.blockSeverity] && CONFIDENCE_RANK[f.confidence] >= CONFIDENCE_RANK[policy.blockConfidence];
   if (strong && hasEvidence(f)) return 'block';
-  if (f.severity === 'low' && f.confidence === 'low') return 'info';
+  // baixa confiança = heurística que erra: observação, não aviso (só aviso se a gravidade for alta)
+  if (f.confidence === 'low' && SEVERITY_RANK[f.severity] < SEVERITY_RANK.high) return 'info';
   return 'warn';
 }
 

@@ -10,8 +10,9 @@ import type { Check } from './types.js';
 import { symbolsCheck } from './symbols.js';
 import { activeSecretsCheck } from './trufflehog.js';
 import { untestedCheck } from './untested.js';
+import { processCheck } from './process.js';
 
 /** Verificações da fase de segurança e deploy, na ordem em que aparecem no relatório. */
-export const SECURITY_CHECKS: Check[] = [secretsCheck, activeSecretsCheck, lockfileCheck, osvCheck, workflowsCheck, sastCheck, migrationsCheck, envVarsCheck, symbolsCheck, domainCheck, hygieneCheck, riskCheck, untestedCheck];
+export const SECURITY_CHECKS: Check[] = [secretsCheck, activeSecretsCheck, lockfileCheck, osvCheck, workflowsCheck, sastCheck, migrationsCheck, envVarsCheck, symbolsCheck, domainCheck, hygieneCheck, riskCheck, untestedCheck, processCheck];
 
 export type { Check, CheckContext, CheckOutput } from './types.js';

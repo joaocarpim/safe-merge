@@ -4,7 +4,8 @@ import { CONFIG_FILE, GENERATED, isCommentLine } from './paths.js';
 import type { Check, CheckContext, CheckOutput } from './types.js';
 
 const CODE_FILE = /\.(m?[jt]sx?|cjs|cts|mts|vue|svelte|py|go|rb|php|java|kt|cs|dart|rs)$/;
-export const TEST_FILE = /(^|\/)(__tests__|tests?|spec|e2e)\/|[._-](test|spec)\.[^/]+$|(^|\/)test_[^/]+\.py$|_test\.(go|py|rb)$|(^|\/)src\/test\/|(Test|Tests|IT)\.(java|kt)$|(^|\/)conftest\.py$/i;
+// inclui fixtures, factories, mocks e o tests.py de app Django: dados fictícios moram aí
+export const TEST_FILE = /(^|\/)(__tests__|__mocks__|tests?|spec|e2e|integration_test|fixtures?|mocks?|testing|test[-_]?utils?|factories)\/|[._-](test|spec|stories)\.[^/]+$|(^|\/)test_[^/]+\.py$|_test\.(go|py|rb|dart)$|(^|\/)src\/test\/|(Test|Tests|IT)\.(java|kt)$|(^|\/)(conftest|tests|factories|fixtures)\.py$/i;
 const SCRIPT_FILE = /(^|\/)(scripts?|bin|tools|seeds?|seeders|migrations?)\//;
 
 interface Rule {

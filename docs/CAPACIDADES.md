@@ -45,13 +45,19 @@ que mexem nos mesmos arquivos são aprofundadas:
 | --- | --- |
 | Vai conflitar com a sua quando as duas forem mergeadas | aviso, com os arquivos, o número do PR e o autor (com `gh` logado) |
 | Altera a mesma função que a sua, sem conflito de texto | aviso: quem mergear depois confere a lógica |
-| Sua branch está empilhada sobre ela (PR empilhado) | aviso: ela precisa entrar antes |
+| Sua branch está empilhada sobre ela (PR empilhado) | **um** motivo só, com a base mais próxima e o tamanho da stack; aviso se a base é um PR aberto, informação se são só branches locais |
 | Ela depende da sua | informação na lista |
 | Ela renomeou um arquivo que você alterou | nota na lista |
 
-Lockfiles em comum são ignorados (configurável em `overlap.ignorePaths`).
+Lockfiles em comum são ignorados (configurável em `overlap.ignorePaths`). Branches de preview, rascunho e
+backup (`local/`, `preview`, `wip/`, `tmp/`, `backup/`, `archive/`, `old/`…) ficam fora do cruzamento
+(`overlap.ignoreBranches`), a não ser que tenham PR aberto; a cobertura diz quantas foram ignoradas.
 
 ## 3. Testes no resultado do merge (conflito semântico)
+
+Sem `--test-cmd`, o safemerge **não roda testes sozinho** (rodar testes executa código do repositório), mas
+detecta o comando provável do projeto (`npm test`, `pnpm test`, `pytest`, `python manage.py test`,
+`flutter test`, `go test ./...`, `cargo test`, Gradle, Maven, RSpec, PHPUnit) e o sugere na cobertura.
 
 Com `--test-cmd` (ou `semantic.command`), o safemerge faz o merge numa cópia temporária e roda os testes
 no resultado. Se falharem, roda também no destino e na sua branch para dizer a causa:
@@ -112,12 +118,31 @@ Só nas linhas que a branch acrescenta, com a linha como evidência:
 | TLS/CSRF/permissão desligados, comparação de segredo com `==` | aviso |
 | `console.log`/`debugger`/`print` esquecidos, URL local/IP fixo, `any`/`@ts-ignore` | aviso |
 | `.only`/`.skip` em teste | aviso |
-| Consulta ao banco dentro de laço (N+1), chamada HTTP sem timeout, exceção engolida | aviso |
+| Consulta ao banco dentro de laço (N+1), chamada HTTP sem timeout, exceção engolida | observação (heurística de texto: erra; catch com comentário e `fetch` dentro de string/JS injetado não contam) |
 | Contador/versão sem lock, idempotência sem reservar a chave antes da chamada externa | aviso |
 | Transação com lock segurando I/O, lista de entrada sem limite, SQL destrutivo no código | aviso |
 | Migração destrutiva (DROP/TRUNCATE) ou sem volta | aviso |
 | Reformatação em massa misturada com a mudança | aviso |
 | TODO/FIXME novo | observação |
+
+## 6b. Processo do PR (descrição e commits)
+
+Lê a descrição do PR (pelo `gh`, ou `--body`/`--body-file` quando ainda não há PR) e as mensagens dos
+commits. A cobertura diz qual dos dois foi lido.
+
+| Verificação | Resultado |
+| --- | --- |
+| Migração na branch e nenhuma menção a migração/deploy/rollback na descrição | aviso (confiança alta com descrição; média lendo só os commits) |
+| Commits de rascunho (`fixup!`, `squash!`, `WIP`…) | aviso: faça squash |
+| Descrição vazia ou curta (`process.minDescription`) | aviso |
+| Seção obrigatória do time faltando (`process.requiredSections`, ex.: `^#+\s*como testar`) | aviso |
+| PR grande (`process.maxFiles`/`process.maxLines`, padrão 40 arquivos ou 1000 linhas) | observação |
+
+## Nível dos achados
+
+Bloqueia só o que tem arquivo, linha, evidência e gravidade/confiança acima de `security.blockSeverity`/
+`blockConfidence`. Heurística de **baixa confiança** (por nome ou texto) vira **observação** e não muda o
+veredito, a não ser que a gravidade seja alta: "mergear com atenção" fica para o que vale a pena ler.
 
 ## 7. IA com verificação (plugin do Claude Code)
 
@@ -158,3 +183,7 @@ Esse cenário foi escrito junto com a ferramenta; o número que importa é o do 
 - As integrações com gitleaks, zizmor, semgrep, OSV-Scanner, TruffleHog, Docker, strace e Mergiraf foram
   testadas com as saídas no formato real de cada uma, não com as ferramentas instaladas.
 - `strace` só no Linux. Testes no Docker usam a imagem `isolation.image` (padrão `node:20-bookworm-slim`).
+- Não revisa lógica nem arquitetura (máquina de estados, idempotência do domínio, desenho do módulo): isso é
+  do revisor humano ou de uma revisão por IA. O processo do PR confere só o que dá para conferir no texto.
+- Sem descrição de PR (sem `gh` logado, sem PR aberto e sem `--body`), a checagem de processo lê só as
+  mensagens dos commits.

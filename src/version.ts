@@ -1,2 +1,2 @@
 // Mantido igual ao package.json (conferido em teste).
-export const VERSION = '0.3.1';
+export const VERSION = '0.4.0';

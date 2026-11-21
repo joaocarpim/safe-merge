@@ -14,6 +14,11 @@ export interface Config {
     maxAgeDays: number;
     /** Arquivos que conflitam o tempo todo e se resolvem sozinhos (expressões). */
     ignorePaths: string[];
+    /**
+     * Branches que não entram no cruzamento (expressões sobre o nome): preview, rascunho, backup. Uma branch
+     * com PR aberto entra sempre, mesmo casando aqui.
+     */
+    ignoreBranches: string[];
   };
   semantic: {
     /** Comando de testes rodado no resultado do merge. Sem ele, a checagem é pulada. */
@@ -65,6 +70,15 @@ export interface Config {
     /** Rotas públicas de propósito (expressões sobre o caminho). */
     publicRoutes: string[];
   };
+  process: {
+    /** Acima disso (arquivos ou linhas alteradas), avisa que o PR é grande para uma revisão só. */
+    maxFiles: number;
+    maxLines: number;
+    /** Descrição do PR com menos caracteres que isso conta como vazia. */
+    minDescription: number;
+    /** Seções que a descrição precisa ter (expressões, ex.: "^#+\\s*como testar"). Padrão do time. */
+    requiredSections: string[];
+  };
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -73,6 +87,7 @@ export const DEFAULT_CONFIG: Config = {
   warnBehindCommits: 30,
   overlap: {
     maxAgeDays: 60,
+    ignoreBranches: ['^local/', '(^|/)preview', '^wip/', '^tmp/', '^temp/', '^backup/', '^archive/', '^old/', '^sandbox/', '^playground/', '^spike/', '^experiment'],
     ignorePaths: [
       '(^|/)package-lock\\.json$',
       '(^|/)yarn\\.lock$',
@@ -116,6 +131,7 @@ export const DEFAULT_CONFIG: Config = {
     ],
   },
   mergiraf: { enabled: true },
+  process: { maxFiles: 40, maxLines: 1000, minDescription: 30, requiredSections: [] },
   domain: {
     tenantModels: [],
     tenantFields: ['tenantId', 'tenant_id', 'empresaId', 'empresa_id', 'companyId', 'company_id', 'organizationId', 'organization_id', 'contaId', 'conta_id'],

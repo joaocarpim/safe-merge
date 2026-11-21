@@ -151,6 +151,7 @@ safemerge --sarif resultado.sarif      # para o GitHub Code Scanning
 safemerge --save                       # guarda tudo em .safemerge/runs/<data>/ (txt, md, html, json, sarif)
 safemerge --fail-on warn               # sai com erro também nos avisos (para CI)
 safemerge --no-fetch --no-prs          # sem rede
+safemerge --body-file descricao.md     # confere a descrição do PR antes de abrir (deploy, seções do time)
 ```
 
 Códigos de saída: `0` pode mergear · `1` o veredito atingiu `--fail-on` (padrão: `block`) · `2` erro de uso.

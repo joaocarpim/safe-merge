@@ -7,6 +7,8 @@ export interface PrInfo {
   draft: boolean;
   headRefName: string;
   url: string;
+  /** Descrição do PR (vazia se o gh não trouxe). */
+  body?: string;
 }
 
 interface RawPr {
@@ -16,6 +18,7 @@ interface RawPr {
   isDraft?: boolean;
   url?: string;
   author?: { login?: string } | null;
+  body?: string;
 }
 
 /** Interpreta a saída JSON de `gh pr list`. Ignora entradas incompletas. */
@@ -37,6 +40,7 @@ export function parsePrList(json: string): PrInfo[] {
       draft: item.isDraft === true,
       headRefName: item.headRefName,
       url: item.url ?? '',
+      ...(typeof item.body === 'string' ? { body: item.body } : {}),
     });
   }
   return out;
@@ -52,7 +56,7 @@ export interface PrListing {
 export function listOpenPrs(cwd: string): PrListing {
   const proc = spawnSync(
     'gh',
-    ['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,title,headRefName,isDraft,url,author'],
+    ['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,title,headRefName,isDraft,url,author,body'],
     { cwd, encoding: 'utf8', timeout: 60_000 },
   );
   if (proc.error) return { prs: [], warning: 'gh não encontrado; PRs não foram associadas às branches' };

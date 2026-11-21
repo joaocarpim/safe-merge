@@ -7,6 +7,8 @@ import type { Check, CheckContext, CheckOutput } from './types.js';
 const CODE_FILE = /\.(m?[jt]sx?|cjs|cts|mts|vue|svelte|py|go|rb|php|java|kt|cs|rs|ex|exs)$/;
 const ENV_EXAMPLES = new Set(['.env.example', '.env.sample', '.env.template', '.env.dist', '.env.defaults', 'example.env']);
 const IGNORED = new Set(['NODE_ENV', 'CI', 'PORT', 'HOME', 'PATH', 'PWD', 'TZ', 'DEBUG', 'USER', 'SHELL', 'LANG', 'TERM']);
+/** Constantes que o próprio Vite/Astro/SvelteKit define em import.meta.env: não são configuração do deploy. */
+const BUILTIN_META_ENV = new Set(['PROD', 'DEV', 'MODE', 'SSR', 'BASE_URL', 'SITE', 'ASSETS_PREFIX']);
 
 const PATTERNS: RegExp[] = [
   /process\.env\.([A-Z_][A-Z0-9_]*)/g,
@@ -35,6 +37,7 @@ export function envUses(lines: AddedLine[]): EnvUse[] {
       re.lastIndex = 0;
       for (const m of l.text.matchAll(re)) {
         const name = m[1]!;
+        if (re.source.startsWith('import\\.meta') && BUILTIN_META_ENV.has(name)) continue;
         if (!IGNORED.has(name) && !seen.has(name)) seen.set(name, { name, at: l });
       }
     }
