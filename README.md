@@ -21,6 +21,7 @@
 </p>
 
 <p align="center">
+  <a href="https://joaocarpim.github.io/safe-merge/"><b>Site</b></a> ·
   <a href="#instalação">Instalação</a> ·
   <a href="#formas-de-usar">Formas de usar</a> ·
   <a href="#o-que-ele-analisa">O que analisa</a> ·

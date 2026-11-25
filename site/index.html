@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>safemerge: saiba se a sua branch pode ser mergeada antes do merge</title>
+<meta name="description" content="CLI e extensão do VS Code que dizem, antes do merge e sem alterar nada, se a sua branch pode entrar: conflitos com o destino e com outros PRs, conflitos que o git não vê, segurança e riscos de produção.">
+<meta property="og:title" content="safemerge">
+<meta property="og:description" content="Saiba se a sua branch pode ser mergeada antes do merge acontecer.">
+<meta property="og:image" content="imagens/vscode-painel.png">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --papel: #EDF0F4;
+    --papel-2: #E1E6EC;
+    --tinta: #15171C;
+    --texto: #4B5563;
+    --linha: #CDD4DD;
+    --verde: #17945F;
+    --vermelho: #B33A2B;
+    --vermelho-claro: #F6E1DD;
+    --azul: #3E5F9E;
+    --titulo: "Familjen Grotesk", system-ui, sans-serif;
+    --corpo: "Public Sans", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--papel); color: var(--tinta); font: 400 17px/1.6 var(--corpo); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--azul); outline-offset: 3px; border-radius: 4px; }
+  code { font-family: var(--mono); font-size: .9em; }
+  .largura { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+  header.topo { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+  .marca { display: flex; align-items: center; gap: 10px; font: 700 22px/1 var(--titulo); letter-spacing: -0.01em; text-decoration: none; }
+  .marca img { width: 32px; height: 32px; }
+  nav.links { display: flex; gap: 22px; font-weight: 500; font-size: 15px; }
+  nav.links a { text-decoration: none; color: var(--texto); }
+  nav.links a:hover { color: var(--tinta); }
+
+  .heroi { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; padding: 48px 0 88px; }
+  h1 { font: 700 clamp(40px, 5.4vw, 66px)/1.02 var(--titulo); letter-spacing: -0.03em; margin: 0 0 22px; max-width: 14ch; }
+  .heroi p.sub { font-size: 19px; color: var(--texto); max-width: 46ch; margin: 0 0 32px; }
+  .acoes { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 20px; border-radius: 8px; font: 600 16px/1 var(--corpo); text-decoration: none; border: 1.5px solid var(--tinta); }
+  .btn.pri { background: var(--tinta); color: #fff; }
+  .btn.pri:hover { background: #2A2E36; }
+  .btn.sec:hover { background: var(--papel-2); }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .nota { margin-top: 16px; font-size: 14px; color: var(--texto); }
+
+  /* o merge simulado */
+  .simulacao { background: #fff; border: 1.5px solid var(--tinta); border-radius: 14px; overflow: hidden; }
+  .simulacao svg.grafo { display: block; width: 100%; height: auto; background: #FAFBFC; border-bottom: 1.5px solid var(--linha); }
+  .grafo .ramo { fill: none; stroke-width: 4; stroke-linecap: round; }
+  .grafo .rotulo { font: 500 13px var(--mono); fill: var(--texto); }
+  .grafo .no { stroke: #fff; stroke-width: 3; }
+  .grafo .anima { stroke-dasharray: var(--comp); stroke-dashoffset: var(--comp); animation: desenhar 1.1s ease-out forwards; }
+  .grafo .depois { opacity: 0; animation: surgir .35s ease-out forwards; }
+  @keyframes desenhar { to { stroke-dashoffset: 0; } }
+  @keyframes surgir { to { opacity: 1; } }
+  .veredito { padding: 18px 22px 20px; opacity: 0; animation: surgir .4s ease-out 2.5s forwards; }
+  .veredito .titulo { display: flex; align-items: center; gap: 10px; font: 700 21px/1.2 var(--titulo); color: var(--vermelho); margin-bottom: 12px; }
+  .veredito .titulo svg { width: 22px; height: 22px; }
+  .veredito ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .veredito li { display: block; padding: 10px 12px; background: var(--vermelho-claro); border-radius: 8px; font-size: 15px; }
+  .veredito li code { color: #7A2318; font-size: 13px; }
+  .veredito li .onde { display: block; margin-top: 4px; }
+
+  section { padding: 88px 0; border-top: 1.5px solid var(--linha); }
+  h2 { font: 700 clamp(30px, 3.6vw, 44px)/1.08 var(--titulo); letter-spacing: -0.025em; margin: 0 0 16px; max-width: 24ch; }
+  .intro { color: var(--texto); font-size: 18px; max-width: 62ch; margin: 0 0 44px; }
+
+  .casos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 56px; }
+  .caso { padding: 20px 0; border-bottom: 1px solid var(--linha); display: grid; grid-template-columns: 22px 1fr; gap: 14px; }
+  .caso::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--vermelho); margin-top: 9px; }
+  .caso b { display: block; font: 700 18px/1.3 var(--titulo); margin-bottom: 4px; }
+  .caso span { color: var(--texto); font-size: 16px; }
+
+  .resposta { display: grid; gap: 36px; }
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1.5px solid var(--tinta); }
+  figcaption { font-size: 15px; color: var(--texto); margin-top: 12px; max-width: 70ch; }
+  .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+
+  table.medido { width: 100%; border-collapse: collapse; font-size: 16px; }
+  table.medido td { padding: 14px 0; border-bottom: 1px solid var(--linha); vertical-align: top; }
+  table.medido td:first-child { color: var(--texto); padding-right: 24px; width: 46%; }
+  table.medido td:last-child { font-weight: 600; }
+  .ressalva { margin-top: 18px; font-size: 15px; color: var(--texto); max-width: 70ch; }
+
+  .usar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .modo { border: 1.5px solid var(--tinta); border-radius: 12px; padding: 26px; background: #fff; display: flex; flex-direction: column; }
+  .modo h3 { font: 700 21px/1.2 var(--titulo); margin: 0 0 6px; }
+  .modo p { margin: 0 0 18px; color: var(--texto); font-size: 15px; }
+  .cmd { position: relative; background: var(--papel); border: 1px solid var(--linha); border-radius: 8px; padding: 12px 44px 12px 14px; font: 400 13px/1.55 var(--mono); word-break: break-all; margin-bottom: 10px; }
+  .cmd button { position: absolute; top: 8px; right: 8px; border: 0; background: transparent; cursor: pointer; padding: 4px; border-radius: 6px; color: var(--texto); }
+  .cmd button:hover { background: var(--papel-2); color: var(--tinta); }
+  .cmd button svg { width: 16px; height: 16px; display: block; }
+  .modo .btn { margin-top: auto; align-self: flex-start; }
+  .mais { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; }
+  .mais h3 { font: 700 19px/1.2 var(--titulo); margin: 0 0 6px; }
+  .mais p { margin: 0 0 12px; color: var(--texto); font-size: 15px; }
+  pre.yaml { margin: 0; background: var(--tinta); color: #E4E7EB; border-radius: 10px; padding: 18px 20px; font: 400 13px/1.65 var(--mono); overflow-x: auto; }
+  pre.yaml .k { color: #9DB7E8; }
+  .requisito { margin-top: 28px; font-size: 15px; color: var(--texto); }
+
+  footer { border-top: 1.5px solid var(--linha); padding: 36px 0 56px; color: var(--texto); font-size: 15px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
+
+  .aviso-copiado { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); background: var(--tinta); color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; }
+  .aviso-copiado.ver { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 900px) {
+    .heroi, .duas, .usar, .casos, .mais { grid-template-columns: 1fr; }
+    nav.links a.opcional { display: none; }
+    .heroi { padding-top: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .grafo .anima { animation: none; stroke-dashoffset: 0; }
+    .grafo .depois, .veredito { animation: none; opacity: 1; }
+    * { scroll-behavior: auto !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="largura">
+  <header class="topo">
+    <a class="marca" href="#"><img src="logo.svg" alt="">safemerge</a>
+    <nav class="links">
+      <a class="opcional" href="#o-que-pega">O que ele pega</a>
+      <a class="opcional" href="#usar">Instalar</a>
+      <a href="https://github.com/joaocarpim/safe-merge">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="heroi">
+      <div>
+        <h1>Saiba se a sua branch pode entrar antes do merge.</h1>
+        <p class="sub">O safemerge simula o merge com o destino e com cada PR aberto, roda os seus testes no resultado e confere a segurança do que a branch traz. Sem mudar nada no seu repositório, ele diz se pode mergear, por quê, e em qual arquivo e linha.</p>
+        <div class="acoes">
+          <a class="btn pri" href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
+            Instalar no VS Code
+          </a>
+          <a class="btn sec" href="https://github.com/joaocarpim/safe-merge">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 2.9.8.1-.6.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7c-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>
+            Ver no GitHub
+          </a>
+        </div>
+        <p class="nota">Grátis e de código aberto (MIT). Zero dependências em produção. Também roda no terminal, no pre-push e no GitHub Actions.</p>
+      </div>
+
+      <div class="simulacao" role="img" aria-label="Simulação: a branch feature/desconto é mergeada na dev junto com o PR 41; os testes quebram no resultado e o veredito é Não mergear">
+        <svg class="grafo" viewBox="0 0 520 250" aria-hidden="true">
+          <path class="ramo anima" style="--comp: 470px; stroke: var(--azul)" d="M30 70 H500"/>
+          <path class="ramo anima" style="--comp: 460px; stroke: var(--verde); animation-delay: .35s" d="M110 70 C150 70 150 150 200 150 H330 C380 150 380 70 420 70"/>
+          <path class="ramo anima" style="--comp: 520px; stroke: #8A94A3; animation-delay: .6s" d="M170 70 C210 70 210 210 260 210 H330 C380 210 380 70 420 70"/>
+          <circle class="no" cx="30" cy="70" r="8" fill="var(--azul)"/>
+          <circle class="no depois" style="animation-delay: .3s" cx="110" cy="70" r="7" fill="var(--azul)"/>
+          <circle class="no depois" style="animation-delay: .5s" cx="170" cy="70" r="7" fill="var(--azul)"/>
+          <circle class="no depois" style="animation-delay: .9s" cx="260" cy="150" r="7" fill="var(--verde)"/>
+          <circle class="no depois" style="animation-delay: 1.1s" cx="300" cy="210" r="7" fill="#8A94A3"/>
+          <text class="rotulo" x="30" y="44">dev</text>
+          <text class="rotulo depois" style="animation-delay: .9s" x="212" y="138">feature/desconto</text>
+          <text class="rotulo depois" style="animation-delay: 1.1s" x="214" y="238">PR #41 · renomeia calcularTotal</text>
+          <g class="depois" style="animation-delay: 1.9s">
+            <circle cx="420" cy="70" r="17" fill="var(--vermelho)"/>
+            <path d="M413 63l14 14M427 63l-14 14" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+            <text class="rotulo" x="420" y="38" text-anchor="middle" style="fill: var(--vermelho)">merge simulado</text>
+          </g>
+        </svg>
+        <div class="veredito">
+          <div class="titulo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7"/></svg>Não mergear</div>
+          <ul>
+            <li>Os testes quebram só com as duas branches juntas: o PR #41 renomeou <code>calcularTotal</code>, que a sua branch ainda chama.<code class="onde">src/pedidos/desconto.ts:42</code></li>
+            <li>Um token foi commitado e apagado no commit seguinte, mas continua no histórico.<code class="onde">config/pagamento.ts · commit 7c2e1a9</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <section id="o-que-pega">
+      <h2>O que quebra produção sem o git reclamar.</h2>
+      <p class="intro">O git só avisa do conflito na hora do merge, e só do conflito de texto. Num time com vários PRs abertos, o problema costuma ser outro.</p>
+      <div class="casos">
+        <div class="caso"><div><b>Dois PRs que juntos quebram</b><span>Cada um passa sozinho. O safemerge simula o merge com cada PR aberto e roda os testes no resultado.</span></div></div>
+        <div class="caso"><div><b>Função renomeada no destino</b><span>A <code>dev</code> renomeou uma função que o seu PR ainda chama. O git junta sem reclamar, e o deploy quebra.</span></div></div>
+        <div class="caso"><div><b>Segredo apagado, mas no histórico</b><span>Um token commitado e removido no commit seguinte continua lá. Ele procura em todos os commits da branch.</span></div></div>
+        <div class="caso"><div><b>Dependência com script de instalação</b><span>O caminho dos worms de npm. Dependência nova, suspeita ou com CVE aparece com o motivo.</span></div></div>
+        <div class="caso"><div><b>Migração com o mesmo número</b><span>Duas branches criam a migração 042, ou uma chega mais antiga que outra já aplicada.</span></div></div>
+        <div class="caso"><div><b>O que um revisor sênior apontaria</b><span>N+1, HTTP sem timeout, SQL concatenado, exceção engolida, rota sem autenticação, <code>.env</code> commitado.</span></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Um veredito, os motivos e o plano para mergear.</h2>
+      <p class="intro">Cada verificação diz se rodou, rodou em parte, pulou ou ficou sem ferramenta. Nunca "0 problemas" sem ter olhado. E o relatório termina com o que fazer, em ordem, para a branch poder entrar.</p>
+      <div class="resposta">
+        <figure>
+          <img src="imagens/vscode-painel.png" alt="Painel do safemerge no VS Code com o veredito Não mergear, as fases da análise, os destinos, os arquivos, os PRs abertos e o gráfico de branches">
+          <figcaption>No VS Code: veredito, fases da análise, destinos, PRs abertos e o gráfico das branches.</figcaption>
+        </figure>
+        <div class="duas">
+          <figure>
+            <img src="imagens/vscode-conflitos.png" alt="Conflito mostrado com a sua branch, a base comum e o destino">
+            <figcaption>Conflito com a sua branch, como era antes e o destino, lado a lado.</figcaption>
+          </figure>
+          <figure>
+            <img src="imagens/vscode-plano.png" alt="Plano para mergear com os passos em ordem">
+            <figcaption>Plano para mergear: cada passo com arquivo, linha, evidência e o comando pronto.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Medido num cenário de produção.</h2>
+      <p class="intro">Cerca de 150 módulos, 160 commits na <code>dev</code> e 18 branches abertas, cada uma com uma situação diferente. Sem nenhuma ferramenta externa instalada.</p>
+      <table class="medido">
+        <tr><td>Situações plantadas detectadas</td><td>34 de 34</td></tr>
+        <tr><td>Veredito certo</td><td>18 de 18 branches</td></tr>
+        <tr><td>Alarmes falsos</td><td>0</td></tr>
+        <tr><td>Tempo por branch, com a suíte de testes no merge</td><td>2,2 s (mediana, Windows)</td></tr>
+        <tr><td>Ordem de merge das 17 branches abertas</td><td>13,6 s com 4 em paralelo; 1,2 s repetindo sem mudanças</td></tr>
+        <tr><td>Pasta com front e back</td><td>4,0 s no total, o tempo do mais lento</td></tr>
+      </table>
+      <p class="ressalva">O cenário foi escrito junto com a ferramenta e está no repositório para você reproduzir (<code>npm run test:complex</code>). O número que importa é o do seu repositório.</p>
+    </section>
+
+    <section id="usar">
+      <h2>Use onde você já trabalha.</h2>
+      <p class="intro">A mesma análise no editor, no terminal e no PR. Precisa de Node 20 ou mais novo e git 2.38 ou mais novo.</p>
+      <div class="usar">
+        <div class="modo">
+          <h3>VS Code</h3>
+          <p>Painel com veredito, plano, conflitos, testes e segurança. Conflito sublinhado no código e "Resolver com Claude" (ou a IA que você usa).</p>
+          <div class="cmd"><span>code --install-extension JooVitorAparecidoCarpimdeSouza.safemerge</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <a class="btn pri" href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.safemerge">Abrir no Marketplace</a>
+        </div>
+        <div class="modo">
+          <h3>Terminal</h3>
+          <p>O veredito antes de abrir o PR. Com <code>--test-cmd</code>, roda os testes no resultado do merge.</p>
+          <div class="cmd"><span>npm install -g github:joaocarpim/safe-merge</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <div class="cmd"><span>safemerge --test-cmd "npm test"</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <a class="btn sec" href="https://github.com/joaocarpim/safe-merge/blob/main/docs/COMANDOS.md">Ver os comandos</a>
+        </div>
+        <div class="modo">
+          <h3>Claude Code</h3>
+          <p>A skill <code>/safemerge</code> roda a análise, chama agentes de testes, revisão e segurança, e confere a resposta antes de entregar.</p>
+          <div class="cmd"><span>/plugin marketplace add joaocarpim/safe-merge</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <div class="cmd"><span>/plugin install safemerge@safemerge</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <a class="btn sec" href="https://github.com/joaocarpim/safe-merge/blob/main/docs/SKILL-E-PLUGIN.md">Como funciona o plugin</a>
+        </div>
+      </div>
+      <div class="mais">
+        <div>
+          <h3>Antes de cada push</h3>
+          <p>Bloqueia só o que é "não mergear", no modo rápido (até 20 s). Se o safemerge falhar, o push segue.</p>
+          <div class="cmd"><span>safemerge install-hook</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        </div>
+        <div>
+          <h3>Em todo PR, no GitHub Actions</h3>
+          <p>Comenta o relatório, marca os achados na linha do diff e falha o job conforme o nível que você escolher.</p>
+<pre class="yaml">- <span class="k">uses:</span> joaocarpim/safe-merge@v0.3.0
+  <span class="k">with:</span>
+    <span class="k">test-command:</span> npm test
+    <span class="k">fail-on:</span> block</pre>
+        </div>
+      </div>
+      <p class="requisito">Prefere instalar a extensão à mão? Baixe o <a href="https://github.com/joaocarpim/safe-merge/releases/latest">.vsix da última versão</a>. Ferramentas externas (como Semgrep e OSV) são opcionais: sem elas, o safemerge usa regras internas e diz isso no relatório.</p>
+    </section>
+  </main>
+
+  <footer>
+    <span>safemerge · código aberto, licença MIT</span>
+    <nav>
+      <a href="https://github.com/joaocarpim/safe-merge">Repositório</a>
+      <a href="https://github.com/joaocarpim/safe-merge/blob/main/docs/CAPACIDADES.md">Referência completa</a>
+      <a href="https://joaocarpim.github.io/live-flow/">Do mesmo autor: liveflow</a>
+    </nav>
+  </footer>
+</div>
+<div class="aviso-copiado" id="copiado" role="status" aria-live="polite"></div>
+<script>
+  const aviso = document.getElementById('copiado');
+  document.querySelectorAll('.cmd button').forEach((b) => b.addEventListener('click', async () => {
+    const texto = b.previousElementSibling.textContent;
+    try { await navigator.clipboard.writeText(texto); aviso.textContent = 'Comando copiado'; }
+    catch { aviso.textContent = 'Não deu para copiar: selecione o texto'; }
+    aviso.classList.add('ver');
+    setTimeout(() => aviso.classList.remove('ver'), 1600);
+  }));
+</script>
+</body>
+</html>
